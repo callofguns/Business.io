@@ -36,11 +36,12 @@ npm run dev
 
 ## Branch workflow
 
-- `main` — stable, released code only. Tagged as a beta release (`vX.Y.Z-beta.N`)
-  each time `dev` is promoted here. Every push to `main` also redeploys the
-  live GitHub Pages site (see `.github/workflows/deploy-pages.yml`).
-- `dev` — integration branch (also the repo's default branch). Always the
-  latest working build across all finished stages.
+- `main` — default branch. Stable, released code only. Tagged as a beta
+  release (`vX.Y.Z-beta.N`) each time `dev` is promoted here. Every push to
+  `main` also redeploys the live GitHub Pages site (see
+  `.github/workflows/deploy-pages.yml`).
+- `dev` — integration branch. Always the latest working build across all
+  finished stages.
 - `feature/*` — one branch per stage/feature. Pushing commits to a `feature/*`
   branch automatically merges them into `dev` via GitHub Actions
   (see `.github/workflows/merge-to-dev.yml`).
