@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+/* Class-based dark mode: toggling .dark on <html> flips every `dark:` utility
+   and, more importantly, the theme tokens overridden below — since Tailwind's
+   generated utilities reference these as CSS variables, no per-component
+   dark: classes are needed for color. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 
@@ -39,6 +45,37 @@
   --radius-pill: 999px;
 }
 
+/* Same token names, overridden for dark mode. Every utility class already
+   resolves through these variables, so this block is the entire dark theme. */
+.dark {
+  --color-ink: #eef0f4;
+  --color-ink-soft: #a7acbb;
+  --color-ink-faint: #6e7386;
+
+  --color-surface: #1b1d24;
+  --color-surface-sunken: #121319;
+  --color-border: #262933;
+  --color-border-strong: #343745;
+
+  --color-brand-50: #16233d;
+  --color-brand-100: #1b2c4c;
+  --color-brand-500: #4c8bf5;
+  --color-brand-600: #6ea1f7;
+  --color-brand-700: #8fb4fa;
+
+  --color-gold-600: #f6cf6b;
+
+  --color-good-50: #16301f;
+  --color-good-500: #34c95f;
+  --color-good-600: #4ade80;
+
+  --color-warn-50: #3a2413;
+  --color-warn-600: #ffab5e;
+
+  --color-bad-50: #3a1616;
+  --color-bad-600: #ff6b6b;
+}
+
 html,
 body,
 #root {
@@ -54,6 +91,16 @@ body {
 
 * {
   box-sizing: border-box;
+}
+
+/* Smooth, theme-toggle-only color fade — scoped to color properties so it
+   never fights framer-motion's own transform/opacity springs elsewhere. */
+*,
+*::before,
+*::after {
+  transition-property: background-color, border-color, color, fill, stroke;
+  transition-duration: 200ms;
+  transition-timing-function: ease-out;
 }
 
 ::selection {

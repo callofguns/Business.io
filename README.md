@@ -25,6 +25,7 @@ npm run dev
 ## Stages
 
 - [x] Stage 1 — Home screen: day counter, Next Day progression, bank balance, news feed
+- [x] Dark mode — theme toggle (sidebar), system-preference default, persisted, no flash on load
 - [ ] Stage 2 — My Empire: owned business cards
 - [ ] Stage 3 — Business detail: traffic chart, satisfaction & promotion stats
 - [ ] Stage 4 — Marketplace: buy new businesses
