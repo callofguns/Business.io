@@ -10,6 +10,7 @@ import {
   Lock,
 } from "lucide-react";
 import clsx from "clsx";
+import { ThemeToggle } from "../ui/ThemeToggle";
 
 // Only "home" is wired up in this stage. The rest are listed so the shell's
 // structure doesn't change shape as later stages come online — they just
@@ -61,8 +62,11 @@ export function Sidebar({ current, onNavigate }) {
         })}
       </nav>
 
-      <div className="rounded-xl bg-surface-sunken px-3 py-3 text-[12px] text-ink-faint">
-        More screens unlock as we build them out, stage by stage.
+      <div className="flex flex-col gap-3">
+        <ThemeToggle />
+        <div className="rounded-xl bg-surface-sunken px-3 py-3 text-[12px] text-ink-faint">
+          More screens unlock as we build them out, stage by stage.
+        </div>
       </div>
     </aside>
   );
