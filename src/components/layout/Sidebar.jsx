@@ -32,7 +32,7 @@ export function Sidebar({ current, onNavigate }) {
         <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-500 text-lg">
           🏙️
         </span>
-        <span className="text-[17px] font-extrabold tracking-tight text-ink">Tycoon</span>
+        <span className="text-[17px] font-extrabold tracking-tight text-ink">business.io</span>
       </div>
 
       <nav className="flex flex-1 flex-col gap-1">

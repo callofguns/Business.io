@@ -1,10 +1,12 @@
-# Business Co.
+# business.io
 
 A browser-based business tycoon simulator built for desktop — build an empire of
 businesses, hire staff, invest in stocks and real estate, and climb the rivals
 leaderboard. Time advances a day at a time via the "Next Day" button.
 
 Built stage by stage, one working system at a time.
+
+**Live:** https://callofguns.github.io/business.io/
 
 ## Stack
 
@@ -35,9 +37,10 @@ npm run dev
 ## Branch workflow
 
 - `main` — stable, released code only. Tagged as a beta release (`vX.Y.Z-beta.N`)
-  each time `dev` is promoted here.
-- `dev` — integration branch. Always the latest working build across all
-  finished stages.
+  each time `dev` is promoted here. Every push to `main` also redeploys the
+  live GitHub Pages site (see `.github/workflows/deploy-pages.yml`).
+- `dev` — integration branch (also the repo's default branch). Always the
+  latest working build across all finished stages.
 - `feature/*` — one branch per stage/feature. Pushing commits to a `feature/*`
   branch automatically merges them into `dev` via GitHub Actions
   (see `.github/workflows/merge-to-dev.yml`).
