@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Home,
   Building2,
@@ -9,9 +10,10 @@ import {
   Trophy,
   Lock,
   LogOut,
+  Settings,
 } from "lucide-react";
 import clsx from "clsx";
-import { ThemeToggle } from "../ui/ThemeToggle";
+import { SettingsModal } from "./SettingsModal";
 import { useAuthStore } from "../../state/authStore";
 
 // Only "home" is wired up in this stage. The rest are listed so the shell's
@@ -32,6 +34,7 @@ export function Sidebar({ current, onNavigate }) {
   const playerName = useAuthStore((s) => s.playerName);
   const logout = useAuthStore((s) => s.logout);
   const initial = playerName ? playerName.trim().charAt(0).toUpperCase() : "?";
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   return (
     <aside className="flex h-full w-64 shrink-0 flex-col border-r border-border bg-surface px-4 py-6">
@@ -87,11 +90,20 @@ export function Sidebar({ current, onNavigate }) {
       </nav>
 
       <div className="flex flex-col gap-3">
-        <ThemeToggle />
+        <button
+          type="button"
+          onClick={() => setSettingsOpen(true)}
+          className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-ink-soft hover:bg-surface-sunken hover:text-ink"
+        >
+          <Settings size={18} strokeWidth={2.25} />
+          <span className="flex-1">Settings</span>
+        </button>
         <div className="rounded-xl bg-surface-sunken px-3 py-3 text-[12px] text-ink-faint">
           More screens unlock as we build them out, stage by stage.
         </div>
       </div>
+
+      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </aside>
   );
 }

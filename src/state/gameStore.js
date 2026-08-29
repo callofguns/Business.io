@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import { useCurrencyStore } from "./currencyStore";
+import { formatMoney } from "../lib/format";
 
 let newsIdSeq = 1;
 
@@ -60,6 +62,7 @@ export const useGameStore = create((set, get) => ({
   nextDay: () => {
     const { day, bankBalance, businesses, news } = get();
     const newDay = day + 1;
+    const currency = useCurrencyStore.getState().currency;
 
     const businessIncome = businesses
       .filter((b) => b.active)
@@ -75,7 +78,7 @@ export const useGameStore = create((set, get) => ({
         makeNewsEntry({
           icon: "briefcase",
           title: "Daily earnings collected",
-          subtitle: `+£${businessIncome.toLocaleString("en-GB")} from ${businesses.length} businesses`,
+          subtitle: `+${formatMoney(businessIncome, { currency })} from ${businesses.length} businesses`,
           tone: "good",
           day: newDay,
         })
@@ -86,7 +89,7 @@ export const useGameStore = create((set, get) => ({
         makeNewsEntry({
           icon: "banknote",
           title: "Bank interest credited",
-          subtitle: `+£${interest.toLocaleString("en-GB")} added to your balance`,
+          subtitle: `+${formatMoney(interest, { currency })} added to your balance`,
           tone: "good",
           day: newDay,
         })
