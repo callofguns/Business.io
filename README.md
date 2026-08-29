@@ -6,7 +6,7 @@ leaderboard. Time advances a day at a time via the "Next Day" button.
 
 Built stage by stage, one working system at a time.
 
-**Live:** https://callofguns.github.io/business.io/
+**Live:** https://callofguns.github.io/Business.io/
 
 ## Stack
 
