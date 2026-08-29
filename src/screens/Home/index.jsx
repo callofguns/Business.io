@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ArrowRight, Wallet, Newspaper } from "lucide-react";
 import { useGameStore } from "../../state/gameStore";
 import { useAuthStore } from "../../state/authStore";
@@ -6,6 +7,7 @@ import { PillButton } from "../../components/ui/Button";
 import { AnimatedMoney } from "../../components/ui/AnimatedMoney";
 import { WeekdayStrip } from "./WeekdayStrip";
 import { NewsFeed } from "./NewsFeed";
+import { DaySummaryModal } from "./DaySummaryModal";
 
 export function Home() {
   const day = useGameStore((s) => s.day);
@@ -13,6 +15,12 @@ export function Home() {
   const bankBalance = useGameStore((s) => s.bankBalance);
   const news = useGameStore((s) => s.news);
   const nextDay = useGameStore((s) => s.nextDay);
+  const [summaryOpen, setSummaryOpen] = useState(false);
+
+  const handleNextDay = () => {
+    nextDay();
+    setSummaryOpen(true);
+  };
 
   return (
     <div className="mx-auto max-w-5xl px-10 py-10">
@@ -34,7 +42,7 @@ export function Home() {
               icon={ArrowRight}
               size="lg"
               className="w-full"
-              onClick={nextDay}
+              onClick={handleNextDay}
             >
               Next Day
             </PillButton>
@@ -69,6 +77,8 @@ export function Home() {
           </div>
         </Card>
       </div>
+
+      <DaySummaryModal open={summaryOpen} onClose={() => setSummaryOpen(false)} />
     </div>
   );
 }

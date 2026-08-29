@@ -32,6 +32,9 @@ npm run dev
 - [x] Start New Business — pick from Small Shop / Small Cafe / Small Web Design Agency ($35,000
   each), name it, and it starts earning. Bank interest removed; income is now purely from
   businesses, rolled fresh each day within each business's risk range.
+- [x] Day Summary modal — pops up after every Next Day with a Revenue/Rent/Other Expenses/Net
+  Change breakdown. Rent and Other Expenses are real fields, currently always $0 until Real
+  Estate / Hiring / Tax Office give them meaning.
 - [ ] Stage 3 — Business detail: traffic chart, satisfaction & promotion stats
 - [ ] Stage 4 — Marketplace: buy new businesses
 - [ ] Stage 5 — Hiring flow

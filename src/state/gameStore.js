@@ -14,6 +14,10 @@ const INITIAL_STATE = {
   day: 1,
   bankBalance: 50000,
   businesses: [],
+  // Set by nextDay() and read by the day-summary modal. Rent/otherExpenses
+  // are real fields, currently always 0 — no expense mechanic exists yet
+  // (rent arrives with Real Estate, other costs with Hiring/Tax Office).
+  lastDaySummary: null,
   // Placeholders for future stages — kept here now so later work only adds
   // reducers/screens, it doesn't need to reshape the store.
   employees: [],
@@ -86,7 +90,10 @@ export const useGameStore = create((set, get) => ({
       return { ...b, dailyEarnings: earned };
     });
 
-    const newBalance = bankBalance + businessIncome;
+    const rent = 0;
+    const otherExpenses = 0;
+    const netChange = businessIncome - rent - otherExpenses;
+    const newBalance = bankBalance + netChange;
 
     const entries = [];
     if (businessIncome > 0) {
@@ -106,6 +113,14 @@ export const useGameStore = create((set, get) => ({
       bankBalance: newBalance,
       businesses: updatedBusinesses,
       news: [...entries, ...news].slice(0, 30),
+      lastDaySummary: {
+        day: newDay,
+        revenue: businessIncome,
+        rent,
+        otherExpenses,
+        netChange,
+        newBalance,
+      },
     });
   },
 }));
