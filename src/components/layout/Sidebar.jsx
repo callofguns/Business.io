@@ -19,7 +19,7 @@ import { useAuthStore } from "../../state/authStore";
 // flip from disabled to enabled one at a time.
 const NAV_ITEMS = [
   { key: "home", label: "Home", icon: Home, enabled: true },
-  { key: "empire", label: "My Empire", icon: Building2, enabled: false },
+  { key: "empire", label: "My Empire", icon: Building2, enabled: true },
   { key: "marketplace", label: "Marketplace", icon: ShoppingBag, enabled: false },
   { key: "hiring", label: "Hiring", icon: Users, enabled: false },
   { key: "finance", label: "Finance Manager", icon: LineChart, enabled: false },
