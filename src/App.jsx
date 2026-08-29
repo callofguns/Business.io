@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { AppShell } from "./components/layout/AppShell";
 import { Home } from "./screens/Home";
+import { MyEmpire } from "./screens/MyEmpire";
 import { Login } from "./screens/Login";
 import { useUiStore } from "./state/uiStore";
 import { useThemeStore, applyTheme } from "./state/themeStore";
@@ -8,6 +9,7 @@ import { useAuthStore } from "./state/authStore";
 
 const SCREENS = {
   home: Home,
+  empire: MyEmpire,
 };
 
 export default function App() {
