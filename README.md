@@ -14,6 +14,7 @@ Built stage by stage, one working system at a time.
 - Tailwind CSS v4
 - Framer Motion (spring-based, interruptible animations)
 - Zustand (state)
+- vite-plugin-pwa (installable, works offline)
 
 ## Getting started
 
@@ -35,6 +36,8 @@ npm run dev
 - [x] Day Summary modal — pops up after every Next Day with a Revenue/Rent/Other Expenses/Net
   Change breakdown. Rent and Other Expenses are real fields, currently always $0 until Real
   Estate / Hiring / Tax Office give them meaning.
+- [x] PWA — installable (desktop and mobile "Add to Home Screen"/"Install app"), works offline
+  after first load via a Workbox-generated service worker (`vite-plugin-pwa`, auto-update).
 - [ ] Stage 3 — Business detail: traffic chart, satisfaction & promotion stats
 - [ ] Stage 4 — Marketplace: buy new businesses
 - [ ] Stage 5 — Hiring flow
