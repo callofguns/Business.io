@@ -1,44 +1,19 @@
 import { create } from "zustand";
 import { useCurrencyStore } from "./currencyStore";
 import { formatMoney } from "../lib/format";
+import { STARTER_BUSINESS_OPTIONS } from "../data/businessTypes";
 
 let newsIdSeq = 1;
+let businessIdSeq = 1;
 
 function makeNewsEntry({ icon, title, subtitle, tone = "neutral", day }) {
   return { id: newsIdSeq++, icon, title, subtitle, tone, day };
 }
 
-const STARTER_BUSINESSES = [
-  {
-    id: "biz-corner-cafe",
-    name: "Corner Café",
-    type: "Coffee Shop",
-    location: { city: "London", area: "Camden" },
-    active: true,
-    dailyEarnings: 340,
-  },
-  {
-    id: "biz-fitzone-gym",
-    name: "FitZone Gym",
-    type: "Gym",
-    location: { city: "London", area: "Shoreditch" },
-    active: true,
-    dailyEarnings: 512,
-  },
-  {
-    id: "biz-quickbite-deli",
-    name: "QuickBite Deli",
-    type: "Fast Food Restaurant",
-    location: { city: "London", area: "Peckham" },
-    active: true,
-    dailyEarnings: 275,
-  },
-];
-
 const INITIAL_STATE = {
   day: 1,
   bankBalance: 50000,
-  businesses: STARTER_BUSINESSES,
+  businesses: [],
   // Placeholders for future stages — kept here now so later work only adds
   // reducers/screens, it doesn't need to reshape the store.
   employees: [],
@@ -59,18 +34,59 @@ const INITIAL_STATE = {
 export const useGameStore = create((set, get) => ({
   ...INITIAL_STATE,
 
+  startBusiness: ({ type, name }) => {
+    const option = STARTER_BUSINESS_OPTIONS.find((o) => o.type === type);
+    if (!option) return;
+
+    const trimmedName = name.trim();
+    if (!trimmedName) return;
+
+    const { bankBalance, businesses, day, news } = get();
+    if (bankBalance < option.cost) return;
+
+    const currency = useCurrencyStore.getState().currency;
+    const newBusiness = {
+      id: `biz-${businessIdSeq++}`,
+      name: trimmedName,
+      type: option.type,
+      active: true,
+      dailyEarnings: 0,
+      minEarnings: option.minEarnings,
+      maxEarnings: option.maxEarnings,
+    };
+
+    set({
+      bankBalance: bankBalance - option.cost,
+      businesses: [...businesses, newBusiness],
+      news: [
+        makeNewsEntry({
+          icon: "briefcase",
+          title: `You opened ${newBusiness.name}`,
+          subtitle: `-${formatMoney(option.cost, { currency })} · ${option.type}`,
+          tone: "good",
+          day,
+        }),
+        ...news,
+      ].slice(0, 30),
+    });
+  },
+
   nextDay: () => {
     const { day, bankBalance, businesses, news } = get();
     const newDay = day + 1;
     const currency = useCurrencyStore.getState().currency;
 
-    const businessIncome = businesses
-      .filter((b) => b.active)
-      .reduce((sum, b) => sum + b.dailyEarnings, 0);
+    let businessIncome = 0;
+    let activeCount = 0;
+    const updatedBusinesses = businesses.map((b) => {
+      if (!b.active) return b;
+      activeCount += 1;
+      const earned = Math.round(b.minEarnings + Math.random() * (b.maxEarnings - b.minEarnings));
+      businessIncome += earned;
+      return { ...b, dailyEarnings: earned };
+    });
 
-    const interestRate = 0.0004 + Math.random() * 0.0011;
-    const interest = Math.round(bankBalance * interestRate);
-    const newBalance = bankBalance + businessIncome + interest;
+    const newBalance = bankBalance + businessIncome;
 
     const entries = [];
     if (businessIncome > 0) {
@@ -78,18 +94,7 @@ export const useGameStore = create((set, get) => ({
         makeNewsEntry({
           icon: "briefcase",
           title: "Daily earnings collected",
-          subtitle: `+${formatMoney(businessIncome, { currency })} from ${businesses.length} businesses`,
-          tone: "good",
-          day: newDay,
-        })
-      );
-    }
-    if (interest > 0) {
-      entries.push(
-        makeNewsEntry({
-          icon: "banknote",
-          title: "Bank interest credited",
-          subtitle: `+${formatMoney(interest, { currency })} added to your balance`,
+          subtitle: `+${formatMoney(businessIncome, { currency })} from ${activeCount} business${activeCount === 1 ? "" : "es"}`,
           tone: "good",
           day: newDay,
         })
@@ -99,6 +104,7 @@ export const useGameStore = create((set, get) => ({
     set({
       day: newDay,
       bankBalance: newBalance,
+      businesses: updatedBusinesses,
       news: [...entries, ...news].slice(0, 30),
     });
   },

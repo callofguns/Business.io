@@ -27,8 +27,11 @@ npm run dev
 - [x] Stage 1 — Home screen: day counter, Next Day progression, bank balance, news feed
 - [x] Dark mode — theme toggle (sidebar), system-preference default, persisted, no flash on load
 - [x] Login screen — local name-entry gate, no accounts
-- [x] Stage 2 — My Empire: owned business cards. Businesses now earn daily income, credited on Next Day.
+- [x] Stage 2 — My Empire: owned business cards
 - [x] Settings menu — gear button (sidebar, bottom-left) opens dark mode + currency (USD/GBP/EUR/JPY, defaults to USD)
+- [x] Start New Business — pick from Small Shop / Small Cafe / Small Web Design Agency ($35,000
+  each), name it, and it starts earning. Bank interest removed; income is now purely from
+  businesses, rolled fresh each day within each business's risk range.
 - [ ] Stage 3 — Business detail: traffic chart, satisfaction & promotion stats
 - [ ] Stage 4 — Marketplace: buy new businesses
 - [ ] Stage 5 — Hiring flow
