@@ -1,5 +1,6 @@
 import { ArrowRight, Wallet, Newspaper } from "lucide-react";
 import { useGameStore } from "../../state/gameStore";
+import { useAuthStore } from "../../state/authStore";
 import { Card, SectionHeading } from "../../components/ui/Card";
 import { PillButton } from "../../components/ui/Button";
 import { AnimatedMoney } from "../../components/ui/AnimatedMoney";
@@ -8,7 +9,7 @@ import { NewsFeed } from "./NewsFeed";
 
 export function Home() {
   const day = useGameStore((s) => s.day);
-  const playerName = useGameStore((s) => s.playerName);
+  const playerName = useAuthStore((s) => s.playerName);
   const bankBalance = useGameStore((s) => s.bankBalance);
   const news = useGameStore((s) => s.news);
   const nextDay = useGameStore((s) => s.nextDay);

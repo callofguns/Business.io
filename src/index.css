@@ -93,12 +93,16 @@ body {
   box-sizing: border-box;
 }
 
-/* Smooth, theme-toggle-only color fade — scoped to color properties so it
-   never fights framer-motion's own transform/opacity springs elsewhere. */
-*,
+/* Smooth, theme-toggle-only color fade — scoped to background/border/text so
+   it never fights framer-motion's own transform/opacity springs elsewhere.
+   Deliberately excludes svg (icon fill/stroke): transitioning those via the
+   universal selector across dozens of simultaneously-mounting lucide icons
+   (e.g. the whole sidebar mounting at once after login) caused a real
+   renderer deadlock — requestAnimationFrame stopped firing entirely. */
+*:not(svg, svg *),
 *::before,
 *::after {
-  transition-property: background-color, border-color, color, fill, stroke;
+  transition-property: background-color, border-color, color;
   transition-duration: 200ms;
   transition-timing-function: ease-out;
 }
