@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import { pickFlavorNews } from "../data/newsFlavor";
 
 let newsIdSeq = 1;
 
@@ -51,17 +50,6 @@ export const useGameStore = create((set, get) => ({
           title: "Bank interest credited",
           subtitle: `+£${interest.toLocaleString("en-GB")} added to your balance`,
           tone: "good",
-          day: newDay,
-        })
-      );
-    }
-
-    for (const item of pickFlavorNews(Math.random() < 0.5 ? 1 : 2)) {
-      entries.push(
-        makeNewsEntry({
-          icon: item.icon,
-          title: item.title,
-          tone: item.tone,
           day: newDay,
         })
       );
