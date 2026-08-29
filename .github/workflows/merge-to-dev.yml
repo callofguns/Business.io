@@ -29,10 +29,15 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Merge ${{ github.ref_name }} into dev
+        # No "[skip ci]" here: GitHub Actions treats that as a push-level flag
+        # that suppresses *every* push-triggered workflow on this commit, not
+        # just this one. Since dev is later fast-forwarded into main, that tag
+        # was silently killing the deploy-pages trigger whenever main's tip
+        # happened to be one of these merge commits.
         run: |
           git fetch origin "${{ github.ref_name }}"
           git merge --no-ff "origin/${{ github.ref_name }}" \
-            -m "Auto-merge ${{ github.ref_name }} into dev [skip ci]"
+            -m "Auto-merge ${{ github.ref_name }} into dev"
 
       - name: Push dev
         run: git push origin dev
