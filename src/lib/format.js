@@ -1,23 +1,35 @@
-const gbp0 = new Intl.NumberFormat("en-GB", {
-  style: "currency",
-  currency: "GBP",
-  maximumFractionDigits: 0,
-});
+import { CURRENCIES, DEFAULT_CURRENCY } from "../data/currencies";
 
-const gbp2 = new Intl.NumberFormat("en-GB", {
-  style: "currency",
-  currency: "GBP",
-  maximumFractionDigits: 2,
-});
+// One fixed locale for every currency so formatting stays visually
+// consistent app-wide (symbol first, comma thousands separator) instead of
+// each currency's "native" convention (e.g. EUR often trails the symbol).
+const FORMAT_LOCALE = "en-US";
+const formatterCache = new Map();
 
-export function formatMoney(value, { decimals = false } = {}) {
-  const n = Math.round(value * 100) / 100;
-  return decimals ? gbp2.format(n) : gbp0.format(n);
+function getFormatter(currencyCode, decimals) {
+  const code = CURRENCIES[currencyCode] ? currencyCode : DEFAULT_CURRENCY;
+  const key = `${code}:${decimals ? 2 : 0}`;
+  if (!formatterCache.has(key)) {
+    formatterCache.set(
+      key,
+      new Intl.NumberFormat(FORMAT_LOCALE, {
+        style: "currency",
+        currency: code,
+        maximumFractionDigits: decimals ? 2 : 0,
+      })
+    );
+  }
+  return formatterCache.get(key);
 }
 
-export function formatSigned(value) {
+export function formatMoney(value, { decimals = false, currency = DEFAULT_CURRENCY } = {}) {
+  const n = Math.round(value * 100) / 100;
+  return getFormatter(currency, decimals).format(n);
+}
+
+export function formatSigned(value, currency = DEFAULT_CURRENCY) {
   const sign = value > 0 ? "+" : value < 0 ? "-" : "";
-  return `${sign}${formatMoney(Math.abs(value))}`;
+  return `${sign}${formatMoney(Math.abs(value), { currency })}`;
 }
 
 export const WEEKDAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];

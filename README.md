@@ -28,6 +28,7 @@ npm run dev
 - [x] Dark mode — theme toggle (sidebar), system-preference default, persisted, no flash on load
 - [x] Login screen — local name-entry gate, no accounts
 - [x] Stage 2 — My Empire: owned business cards. Businesses now earn daily income, credited on Next Day.
+- [x] Settings menu — gear button (sidebar, bottom-left) opens dark mode + currency (USD/GBP/EUR/JPY, defaults to USD)
 - [ ] Stage 3 — Business detail: traffic chart, satisfaction & promotion stats
 - [ ] Stage 4 — Marketplace: buy new businesses
 - [ ] Stage 5 — Hiring flow
