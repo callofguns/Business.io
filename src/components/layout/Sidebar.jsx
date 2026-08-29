@@ -8,9 +8,11 @@ import {
   Receipt,
   Trophy,
   Lock,
+  LogOut,
 } from "lucide-react";
 import clsx from "clsx";
 import { ThemeToggle } from "../ui/ThemeToggle";
+import { useAuthStore } from "../../state/authStore";
 
 // Only "home" is wired up in this stage. The rest are listed so the shell's
 // structure doesn't change shape as later stages come online — they just
@@ -27,13 +29,35 @@ const NAV_ITEMS = [
 ];
 
 export function Sidebar({ current, onNavigate }) {
+  const playerName = useAuthStore((s) => s.playerName);
+  const logout = useAuthStore((s) => s.logout);
+  const initial = playerName ? playerName.trim().charAt(0).toUpperCase() : "?";
+
   return (
     <aside className="flex h-full w-64 shrink-0 flex-col border-r border-border bg-surface px-4 py-6">
-      <div className="mb-8 flex items-center gap-2.5 px-2">
+      <div className="mb-6 flex items-center gap-2.5 px-2">
         <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-500 text-lg">
           🏙️
         </span>
         <span className="text-[17px] font-extrabold tracking-tight text-ink">business.io</span>
+      </div>
+
+      <div className="mb-6 flex items-center gap-3 rounded-xl bg-surface-sunken px-3 py-2.5">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-500 text-[13px] font-bold text-white">
+          {initial}
+        </span>
+        <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-ink">
+          {playerName}
+        </span>
+        <button
+          type="button"
+          onClick={logout}
+          aria-label="Switch player"
+          title="Switch player"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-ink-faint hover:bg-border-strong hover:text-ink"
+        >
+          <LogOut size={14} strokeWidth={2.25} />
+        </button>
       </div>
 
       <nav className="flex flex-1 flex-col gap-1">

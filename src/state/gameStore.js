@@ -8,7 +8,6 @@ function makeNewsEntry({ icon, title, subtitle, tone = "neutral", day }) {
 
 const INITIAL_STATE = {
   day: 1,
-  playerName: "Founder",
   bankBalance: 50000,
   // Placeholders for future stages — kept here now so later work only adds
   // reducers/screens, it doesn't need to reshape the store.
