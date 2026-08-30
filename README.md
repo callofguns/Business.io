@@ -38,9 +38,16 @@ npm run dev
   Estate / Hiring / Tax Office give them meaning.
 - [x] PWA — installable (desktop and mobile "Add to Home Screen"/"Install app"), works offline
   after first load via a Workbox-generated service worker (`vite-plugin-pwa`, auto-update).
+- [x] Stage 4 — Marketplace: 16 buildings (8 retail, 8 office) to buy or rent, each with a
+  traffic index, customer capacity, and stat-driven rent. Starting a business now requires a
+  matching building first. Businesses sell named products at weekly-drifting market prices
+  (re-rolled every Sunday); daily earnings are a real function of building traffic/capacity,
+  business capacity (grown via an "Invest in Capacity" stub), and product prices — the old
+  flat random-range placeholder is gone. Rent is now a real recurring expense in the Day
+  Summary. See `src/lib/economy.js` for the formulas and `scripts/verify-economy.js` for a
+  headless economic sanity check (`node_modules/.bin/jiti scripts/verify-economy.js`).
 - [ ] Stage 3 — Business detail: traffic chart, satisfaction & promotion stats
-- [ ] Stage 4 — Marketplace: buy new businesses
-- [ ] Stage 5 — Hiring flow
+- [ ] Stage 5 — Hiring flow (full flow — capacity growth already has a lightweight stub)
 - [ ] Stage 6 — Finance Manager: stock market
 - [ ] Stage 7 — Real estate investments
 - [ ] Stage 8 — Tax Office

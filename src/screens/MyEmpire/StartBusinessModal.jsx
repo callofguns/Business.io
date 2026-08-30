@@ -1,34 +1,51 @@
-import { useState } from "react";
-import { ArrowLeft } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ArrowLeft, Activity, Gauge } from "lucide-react";
 import clsx from "clsx";
 import { Modal } from "../../components/ui/Modal";
 import { PillButton } from "../../components/ui/Button";
 import { BusinessTypeIcon } from "../../components/ui/BusinessTypeIcon";
-import { useGameStore } from "../../state/gameStore";
+import { BuildingTypeIcon } from "../../components/ui/BuildingTypeIcon";
+import { IconRow } from "../../components/ui/IconRow";
+import { useGameStore, vacantBuildingsFor } from "../../state/gameStore";
 import { useCurrencyStore } from "../../state/currencyStore";
+import { useUiStore } from "../../state/uiStore";
 import { formatMoney } from "../../lib/format";
+import { expectedDailyRevenue, startingCapacity } from "../../lib/economy";
 import { STARTER_BUSINESS_OPTIONS } from "../../data/businessTypes";
 
-function earningsLabel(option, currency) {
-  if (option.minEarnings === option.maxEarnings) {
-    return `${formatMoney(option.minEarnings, { currency })}/day`;
-  }
-  return `${formatMoney(option.minEarnings, { currency })}–${formatMoney(option.maxEarnings, { currency })}/day`;
-}
-
 export function StartBusinessModal({ open, onClose }) {
-  const bankBalance = useGameStore((s) => s.bankBalance);
-  const startBusiness = useGameStore((s) => s.startBusiness);
-  const currency = useCurrencyStore((s) => s.currency);
   const [selectedType, setSelectedType] = useState(null);
+  const [selectedBuildingId, setSelectedBuildingId] = useState(null);
   const [name, setName] = useState("");
 
+  const bankBalance = useGameStore((s) => s.bankBalance);
+  const startBusiness = useGameStore((s) => s.startBusiness);
+  const productPrices = useGameStore((s) => s.productPrices);
+  // Select the raw, store-stable arrays (zustand only gives us a new
+  // reference for these when they actually change) and derive the vacant
+  // list with useMemo, rather than calling vacantBuildingsFor() inside the
+  // selector itself -- that would construct a brand new array on every
+  // single store notification regardless of whether anything relevant
+  // changed, which breaks useSyncExternalStore's reference-stability
+  // expectation and causes a real "Maximum update depth exceeded" loop.
+  const businesses = useGameStore((s) => s.businesses);
+  const acquiredBuildings = useGameStore((s) => s.acquiredBuildings);
+  const vacantBuildings = useMemo(
+    () => vacantBuildingsFor({ businesses, acquiredBuildings }, selectedType),
+    [businesses, acquiredBuildings, selectedType]
+  );
+  const setScreen = useUiStore((s) => s.setScreen);
+  const currency = useCurrencyStore((s) => s.currency);
+
   const selectedOption = STARTER_BUSINESS_OPTIONS.find((o) => o.type === selectedType);
+  const selectedBuilding = vacantBuildings.find((b) => b.id === selectedBuildingId);
   const canAfford = selectedOption ? bankBalance >= selectedOption.cost : true;
-  const canSubmit = Boolean(selectedOption) && name.trim().length > 0 && canAfford;
+  const canSubmit =
+    Boolean(selectedOption) && Boolean(selectedBuilding) && name.trim().length > 0 && canAfford;
 
   const reset = () => {
     setSelectedType(null);
+    setSelectedBuildingId(null);
     setName("");
   };
 
@@ -37,19 +54,28 @@ export function StartBusinessModal({ open, onClose }) {
     onClose();
   };
 
+  const handleOpenMarketplace = () => {
+    setScreen("marketplace");
+    handleClose();
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!canSubmit) return;
-    startBusiness({ type: selectedType, name });
+    startBusiness({ type: selectedType, name, buildingId: selectedBuildingId });
     reset();
     onClose();
   };
 
   const cheapestCost = Math.min(...STARTER_BUSINESS_OPTIONS.map((o) => o.cost));
 
+  let step = 1;
+  if (selectedOption) step = 2;
+  if (selectedOption && selectedBuilding) step = 3;
+
   return (
     <Modal open={open} onClose={handleClose} title="Start New Business" className="max-w-md">
-      {!selectedOption ? (
+      {step === 1 ? (
         <div className="flex flex-col gap-2.5">
           {STARTER_BUSINESS_OPTIONS.map((option) => {
             const affordable = bankBalance >= option.cost;
@@ -68,7 +94,7 @@ export function StartBusinessModal({ open, onClose }) {
                 <div className="min-w-0 flex-1">
                   <p className="text-[15px] font-bold text-ink">{option.type}</p>
                   <p className="text-[12px] text-ink-faint">
-                    {option.riskLabel} · {earningsLabel(option, currency)}
+                    {option.riskLabel} · Needs {option.buildingType} space
                   </p>
                 </div>
                 <p className="shrink-0 text-[14px] font-bold text-ink">
@@ -83,11 +109,76 @@ export function StartBusinessModal({ open, onClose }) {
             </p>
           ) : null}
         </div>
+      ) : step === 2 ? (
+        <div className="flex flex-col gap-3">
+          <button
+            type="button"
+            onClick={() => setSelectedType(null)}
+            className="flex w-fit items-center gap-1.5 text-[13px] font-semibold text-ink-faint hover:text-ink"
+          >
+            <ArrowLeft size={14} strokeWidth={2.5} />
+            Back
+          </button>
+
+          {vacantBuildings.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-border-strong px-4 py-6 text-center">
+              <p className="text-[14px] font-semibold text-ink">
+                You don't own or lease any {selectedOption.buildingType} space yet.
+              </p>
+              <p className="mt-1 text-[12.5px] text-ink-faint">
+                Acquire a building in the Marketplace first, then come back to start this
+                business.
+              </p>
+              <PillButton
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                onClick={handleOpenMarketplace}
+              >
+                Open Marketplace
+              </PillButton>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2.5">
+              {vacantBuildings.map((building) => {
+                const preview = { type: selectedType, currentCapacity: startingCapacity(building) };
+                const estimate = expectedDailyRevenue(preview, building, productPrices);
+                return (
+                  <button
+                    key={building.id}
+                    type="button"
+                    onClick={() => setSelectedBuildingId(building.id)}
+                    className="flex items-center gap-3 rounded-2xl border border-border-strong bg-surface px-4 py-3 text-left transition-colors hover:bg-surface-sunken"
+                  >
+                    <BuildingTypeIcon type={building.type} sizeClass="h-12 w-12 rounded-xl" iconSize={22} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[14px] font-bold text-ink">{building.name}</p>
+                      <p className="text-[12px] text-ink-faint">
+                        {building.city} · {building.area}
+                      </p>
+                      <div className="mt-1 flex items-center gap-3">
+                        <IconRow icon={Activity} className="text-[11.5px]">
+                          Traffic {building.trafficIndex}
+                        </IconRow>
+                        <IconRow icon={Gauge} className="text-[11.5px]">
+                          {building.customerCapacity}/hr
+                        </IconRow>
+                      </div>
+                    </div>
+                    <p className="shrink-0 text-[13px] font-bold text-good-600">
+                      ≈ {formatMoney(estimate, { currency })}/day
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
       ) : (
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <button
             type="button"
-            onClick={() => setSelectedType(null)}
+            onClick={() => setSelectedBuildingId(null)}
             className="flex w-fit items-center gap-1.5 text-[13px] font-semibold text-ink-faint hover:text-ink"
           >
             <ArrowLeft size={14} strokeWidth={2.5} />
@@ -98,7 +189,7 @@ export function StartBusinessModal({ open, onClose }) {
             <div>
               <p className="text-[15px] font-bold text-ink">{selectedOption.type}</p>
               <p className="text-[12px] text-ink-faint">
-                {selectedOption.riskLabel} · {earningsLabel(selectedOption, currency)}
+                {selectedBuilding.name} · {selectedBuilding.city}
               </p>
             </div>
             <p className="shrink-0 text-[14px] font-bold text-ink">
