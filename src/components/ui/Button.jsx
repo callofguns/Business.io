@@ -10,6 +10,7 @@ const VARIANTS = {
 };
 
 const SIZES = {
+  sm: "h-9 px-3.5 text-[13px]",
   md: "h-11 px-5 text-[15px]",
   lg: "h-14 px-6 text-[16px]",
 };
@@ -41,8 +42,13 @@ export function PillButton({
       {...props}
     >
       {Icon ? (
-        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20">
-          <Icon size={14} strokeWidth={2.75} />
+        <span
+          className={clsx(
+            "flex items-center justify-center rounded-full bg-white/20",
+            size === "sm" ? "h-5 w-5" : "h-6 w-6"
+          )}
+        >
+          <Icon size={size === "sm" ? 12 : 14} strokeWidth={2.75} />
         </span>
       ) : null}
       {children}
