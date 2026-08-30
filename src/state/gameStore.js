@@ -126,6 +126,9 @@ export const useGameStore = create((set, get) => ({
       dailyEarnings: 0,
       currentCapacity: startingCapacity(building),
       startedDay: state.day,
+      // Sparse { [productId]: price } -- unset products just follow the
+      // live market price (see effectivePrice in lib/economy.js).
+      customPrices: {},
     };
 
     set({
@@ -171,6 +174,30 @@ export const useGameStore = create((set, get) => ({
         }),
         ...state.news,
       ].slice(0, 30),
+    });
+  },
+
+  // price: null (or omitted) resets the product back to following the live
+  // market price. Otherwise clamped to >= 0 -- no upper bound (the player's
+  // call), but a negative price makes no sense.
+  setProductPrice: ({ businessId, productId, price }) => {
+    const state = get();
+    const business = state.businesses.find((b) => b.id === businessId);
+    if (!business) return;
+    const productExists = BUSINESS_TYPES[business.type]?.products.some((p) => p.id === productId);
+    if (!productExists) return;
+
+    const nextCustomPrices = { ...business.customPrices };
+    if (price == null) {
+      delete nextCustomPrices[productId];
+    } else {
+      nextCustomPrices[productId] = Math.max(0, price);
+    }
+
+    set({
+      businesses: state.businesses.map((b) =>
+        b.id === businessId ? { ...b, customPrices: nextCustomPrices } : b
+      ),
     });
   },
 
