@@ -46,6 +46,11 @@ npm run dev
   flat random-range placeholder is gone. Rent is now a real recurring expense in the Day
   Summary. See `src/lib/economy.js` for the formulas and `scripts/verify-economy.js` for a
   headless economic sanity check (`node_modules/.bin/jiti scripts/verify-economy.js`).
+- [x] Product pricing — click a business card to open its Pricing panel: each product can be
+  priced independently of the live market rate. Matching market is neutral; pricing above
+  trades fewer customers for more margin per sale, pricing below trades margin for turnout
+  (revenue peaks exactly at market price and falls off symmetrically either side). Reset any
+  product back to auto-following the market with one click.
 - [ ] Stage 3 — Business detail: traffic chart, satisfaction & promotion stats
 - [ ] Stage 5 — Hiring flow (full flow — capacity growth already has a lightweight stub)
 - [ ] Stage 6 — Finance Manager: stock market

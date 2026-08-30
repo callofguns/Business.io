@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Briefcase, MapPin, Banknote, Gauge, ChevronRight, TrendingUp } from "lucide-react";
 import { motion } from "framer-motion";
 import { Card } from "../../components/ui/Card";
@@ -11,6 +12,7 @@ import { useCurrencyStore } from "../../state/currencyStore";
 import { formatMoney } from "../../lib/format";
 import { capacityUpgrade } from "../../lib/economy";
 import { buildingById } from "../../data/buildings";
+import { ProductsModal } from "./ProductsModal";
 
 const cardTransition = { type: "spring", stiffness: 380, damping: 32, mass: 0.6 };
 
@@ -19,6 +21,7 @@ export function BusinessCard({ business }) {
   const bankBalance = useGameStore((s) => s.bankBalance);
   const investInCapacity = useGameStore((s) => s.investInCapacity);
   const currency = useCurrencyStore((s) => s.currency);
+  const [pricingOpen, setPricingOpen] = useState(false);
 
   const building = buildingById(buildingId);
   const upgrade = building ? capacityUpgrade(business, building) : null;
@@ -28,7 +31,11 @@ export function BusinessCard({ business }) {
   return (
     <motion.div layout initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={cardTransition}>
       <Card className="flex flex-col">
-        <div className="flex items-center gap-4">
+        <button
+          type="button"
+          onClick={() => setPricingOpen(true)}
+          className="-m-1 flex items-center gap-4 rounded-2xl p-1 text-left transition-colors hover:bg-surface-sunken"
+        >
           <BusinessTypeIcon type={type} />
 
           <div className="min-w-0 flex-1">
@@ -57,7 +64,7 @@ export function BusinessCard({ business }) {
           </div>
 
           <ChevronRight size={18} className="shrink-0 text-ink-faint" />
-        </div>
+        </button>
 
         {building ? (
           <div className="mt-3 flex items-center justify-between gap-3 border-t border-border pt-3">
@@ -78,6 +85,8 @@ export function BusinessCard({ business }) {
           </div>
         ) : null}
       </Card>
+
+      <ProductsModal business={pricingOpen ? business : null} onClose={() => setPricingOpen(false)} />
     </motion.div>
   );
 }

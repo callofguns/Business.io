@@ -20,7 +20,7 @@ globalThis.localStorage = {
 const { useGameStore, vacantBuildingsFor } = await import("../src/state/gameStore.js");
 const { BUILDINGS, buildingById, dailyRentFor } = await import("../src/data/buildings.js");
 const { BUSINESS_TYPES, STARTER_BUSINESS_OPTIONS } = await import("../src/data/businessTypes.js");
-const { expectedDailyRevenue, capacityUpgrade } = await import("../src/lib/economy.js");
+const { expectedDailyRevenue, capacityUpgrade, demandMultiplier } = await import("../src/lib/economy.js");
 const { weekdayIndex } = await import("../src/lib/format.js");
 
 let failures = 0;
@@ -342,6 +342,127 @@ section("investInCapacity");
   check(
     "further investment at max is a no-op",
     useGameStore.getState().bankBalance === balanceAtMax
+  );
+}
+
+// ---------------------------------------------------------------------
+section("setProductPrice / demandMultiplier");
+{
+  const s0 = useGameStore.getState();
+  const biz = s0.businesses.find((b) => b.type === "Small Shop");
+  const building = buildingById(biz.buildingId);
+  const products = BUSINESS_TYPES["Small Shop"].products;
+
+  check(
+    "no custom prices -> demand multiplier is exactly 1",
+    demandMultiplier(biz, s0.productPrices) === 1
+  );
+
+  const revenueAtMarket = expectedDailyRevenue(biz, building, s0.productPrices);
+
+  // price every product at double the market rate -> average ratio 2 ->
+  // demand clamped to 0 (priced completely out of the market)
+  for (const p of products) {
+    const market = s0.productPrices["Small Shop"][p.id];
+    s0.setProductPrice({ businessId: biz.id, productId: p.id, price: market * 2 });
+  }
+  const sHigh = useGameStore.getState();
+  const bizHigh = sHigh.businesses.find((b) => b.id === biz.id);
+  check(
+    "2x market price -> demand multiplier clamps to 0",
+    demandMultiplier(bizHigh, sHigh.productPrices) === 0
+  );
+  check(
+    "2x market price -> expected revenue is 0",
+    expectedDailyRevenue(bizHigh, building, sHigh.productPrices) === 0
+  );
+
+  // price every product at 0 -> average ratio 0 -> demand caps at 2 (the
+  // formula's PRICE_MAX_MULTIPLIER), but revenue is still 0 (price x demand)
+  for (const p of products) {
+    s0.setProductPrice({ businessId: biz.id, productId: p.id, price: 0 });
+  }
+  const sZero = useGameStore.getState();
+  const bizZero = sZero.businesses.find((b) => b.id === biz.id);
+  check(
+    "$0 price -> demand multiplier is 2 (max turnout)",
+    demandMultiplier(bizZero, sZero.productPrices) === 2
+  );
+  check(
+    "$0 price -> expected revenue is 0 (giving it away)",
+    expectedDailyRevenue(bizZero, building, sZero.productPrices) === 0
+  );
+
+  // price every product at 1.5x market -> revenue should be *lower* than
+  // at market price -- this is the "peak at market" shape the whole
+  // mechanic depends on, not just an isolated multiplier check
+  for (const p of products) {
+    const market = sZero.productPrices["Small Shop"][p.id];
+    s0.setProductPrice({ businessId: biz.id, productId: p.id, price: market * 1.5 });
+  }
+  const s15 = useGameStore.getState();
+  const biz15 = s15.businesses.find((b) => b.id === biz.id);
+  const revenue15x = expectedDailyRevenue(biz15, building, s15.productPrices);
+  check(
+    "1.5x market price -> revenue lower than at-market revenue",
+    revenue15x < revenueAtMarket
+  );
+
+  // and the symmetric case (0.5x market) should also be lower than the peak
+  for (const p of products) {
+    const market = s15.productPrices["Small Shop"][p.id];
+    s0.setProductPrice({ businessId: biz.id, productId: p.id, price: market * 0.5 });
+  }
+  const s05 = useGameStore.getState();
+  const biz05 = s05.businesses.find((b) => b.id === biz.id);
+  const revenue05x = expectedDailyRevenue(biz05, building, s05.productPrices);
+  check(
+    "0.5x market price -> revenue also lower than at-market revenue",
+    revenue05x < revenueAtMarket
+  );
+
+  // negative price clamps to 0
+  s0.setProductPrice({ businessId: biz.id, productId: products[0].id, price: -50 });
+  const sNeg = useGameStore.getState();
+  const bizNeg = sNeg.businesses.find((b) => b.id === biz.id);
+  check(
+    "negative price clamps to 0",
+    bizNeg.customPrices[products[0].id] === 0
+  );
+
+  // reset (price: null) removes the override entirely
+  s0.setProductPrice({ businessId: biz.id, productId: products[0].id, price: null });
+  const sReset = useGameStore.getState();
+  const bizReset = sReset.businesses.find((b) => b.id === biz.id);
+  check(
+    "price: null removes the custom override",
+    !(products[0].id in bizReset.customPrices)
+  );
+
+  // reset every product back to market and confirm demand returns to 1
+  for (const p of products) {
+    s0.setProductPrice({ businessId: biz.id, productId: p.id, price: null });
+  }
+  const sBack = useGameStore.getState();
+  const bizBack = sBack.businesses.find((b) => b.id === biz.id);
+  check(
+    "resetting every product -> demand multiplier back to 1",
+    demandMultiplier(bizBack, sBack.productPrices) === 1
+  );
+  check(
+    "customPrices is empty again",
+    Object.keys(bizBack.customPrices).length === 0
+  );
+
+  // guard clauses: unknown business / unknown product are no-ops
+  const balanceBeforeGuards = sBack.bankBalance;
+  s0.setProductPrice({ businessId: "does-not-exist", productId: products[0].id, price: 10 });
+  s0.setProductPrice({ businessId: biz.id, productId: "not-a-real-product", price: 10 });
+  const sGuards = useGameStore.getState();
+  check(
+    "unknown business/product are no-ops",
+    sGuards.bankBalance === balanceBeforeGuards &&
+      Object.keys(sGuards.businesses.find((b) => b.id === biz.id).customPrices).length === 0
   );
 }
 
