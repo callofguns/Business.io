@@ -66,7 +66,10 @@ export function Sidebar({ current, onNavigate }) {
       <nav className="flex flex-1 flex-col gap-1">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
-          const active = current === item.key;
+          // The Business Detail screen is reached from My Empire and has no
+          // nav entry of its own -- keep "My Empire" highlighted while it's
+          // open rather than showing no active item at all.
+          const active = current === item.key || (item.key === "empire" && current === "businessDetail");
           return (
             <button
               key={item.key}

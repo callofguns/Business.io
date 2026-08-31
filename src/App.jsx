@@ -3,6 +3,7 @@ import { AppShell } from "./components/layout/AppShell";
 import { Home } from "./screens/Home";
 import { MyEmpire } from "./screens/MyEmpire";
 import { Marketplace } from "./screens/Marketplace";
+import { BusinessDetail } from "./screens/BusinessDetail";
 import { Login } from "./screens/Login";
 import { useUiStore } from "./state/uiStore";
 import { useThemeStore, applyTheme } from "./state/themeStore";
@@ -12,6 +13,7 @@ const SCREENS = {
   home: Home,
   empire: MyEmpire,
   marketplace: Marketplace,
+  businessDetail: BusinessDetail,
 };
 
 export default function App() {

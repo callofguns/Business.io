@@ -9,6 +9,7 @@ import {
   Truck,
   Newspaper,
   Package,
+  Megaphone,
 } from "lucide-react";
 
 const ICONS = {
@@ -20,6 +21,7 @@ const ICONS = {
   truck: Truck,
   newspaper: Newspaper,
   package: Package,
+  megaphone: Megaphone,
 };
 
 const TILE_TONES = {

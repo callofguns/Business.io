@@ -20,7 +20,16 @@ globalThis.localStorage = {
 const { useGameStore, vacantBuildingsFor } = await import("../src/state/gameStore.js");
 const { BUILDINGS, buildingById, dailyRentFor } = await import("../src/data/buildings.js");
 const { BUSINESS_TYPES, STARTER_BUSINESS_OPTIONS } = await import("../src/data/businessTypes.js");
-const { expectedDailyRevenue, capacityUpgrade, demandMultiplier } = await import("../src/lib/economy.js");
+const {
+  expectedDailyRevenue,
+  expectedDailyVisitors,
+  capacityUpgrade,
+  demandMultiplier,
+  satisfactionTarget,
+  stepSatisfaction,
+  promotionCost,
+  isPromotionActive,
+} = await import("../src/lib/economy.js");
 const { weekdayIndex } = await import("../src/lib/format.js");
 
 let failures = 0;
@@ -166,6 +175,9 @@ section("startBusiness guards");
     "currentCapacity set to half building max",
     biz.currentCapacity === Math.max(8, Math.round(cheapestRetail.customerCapacity * 0.5))
   );
+  check("starts at neutral satisfaction (50)", biz.satisfaction === 50);
+  check("starts with no active promotion", biz.promotionEndDay === null);
+  check("starts with empty traffic history", Array.isArray(biz.trafficHistory) && biz.trafficHistory.length === 0);
 
   // reject: building already occupied
   s.startBusiness({ type: "Small Shop", name: "Second Shop", buildingId: cheapestRetail.id });
@@ -346,6 +358,99 @@ section("investInCapacity");
 }
 
 // ---------------------------------------------------------------------
+section("Satisfaction (reputation) rules");
+{
+  // Pure formula checks
+  check("at-market ratio (1) targets the ceiling (70)", satisfactionTarget(1) === 70);
+  check("underpriced (ratio < 1) also targets the ceiling", satisfactionTarget(0.5) === 70);
+  check("50% overpriced (ratio 1.5) targets the floor (20)", satisfactionTarget(1.5) === 20);
+  check("even more overpriced still floors at 20", satisfactionTarget(3) === 20);
+  check("stepSatisfaction moves +1/day toward a higher target", stepSatisfaction(50, 70) === 51);
+  check("stepSatisfaction moves -1/day toward a lower target", stepSatisfaction(50, 20) === 49);
+  check("stepSatisfaction holds once at target", stepSatisfaction(70, 70) === 70);
+  check("stepSatisfaction never drops below 0", stepSatisfaction(0, -5) === 0);
+  check("stepSatisfaction never exceeds 100", stepSatisfaction(100, 105) === 100);
+
+  // Integration: "Test Shop" has never had a custom price set (that only
+  // happens in the setProductPrice section below, which runs after this
+  // one), so its price ratio has been exactly 1 -- and its target exactly
+  // 70 -- every day since it opened. Compare against that day count rather
+  // than a hardcoded number so this stays correct regardless of how many
+  // nextDay() calls earlier sections happen to make.
+  const s = useGameStore.getState();
+  const biz = s.businesses.find((b) => b.type === "Small Shop");
+  const expected = Math.min(70, 50 + (s.day - biz.startedDay));
+  check(
+    "satisfaction has drifted up toward the at-market target over elapsed days",
+    biz.satisfaction === expected
+  );
+}
+
+// ---------------------------------------------------------------------
+section("Promotions");
+{
+  const s0 = useGameStore.getState();
+  // Use the office business here so "Test Shop" (used by the pricing
+  // section right after this one) is left untouched.
+  const biz = s0.businesses.find((b) => b.type === "Small Web Design Agency");
+  const building = buildingById(biz.buildingId);
+  const cost = promotionCost(building);
+
+  check("promotionCost = 5x the building's daily rent", cost === building.dailyRent * 5);
+  check("no promotion active initially", !isPromotionActive(biz, s0.day));
+
+  const balanceBefore = s0.bankBalance;
+  s0.runPromotion({ businessId: "does-not-exist" });
+  check("unknown business id is a no-op", useGameStore.getState().bankBalance === balanceBefore);
+
+  s0.runPromotion({ businessId: biz.id });
+  const s1 = useGameStore.getState();
+  const biz1 = s1.businesses.find((b) => b.id === biz.id);
+  check("cost deducted", s1.bankBalance === balanceBefore - cost);
+  check("promotionEndDay set N days out", biz1.promotionEndDay === s1.day + 3);
+  check("isPromotionActive true right after starting", isPromotionActive(biz1, s1.day));
+  check(
+    "news entry recorded",
+    s1.news[0].icon === "megaphone" && s1.news[0].title.includes(biz.name)
+  );
+
+  const balanceMid = s1.bankBalance;
+  s0.runPromotion({ businessId: biz.id });
+  check(
+    "starting a second campaign mid-campaign is a no-op",
+    useGameStore.getState().bankBalance === balanceMid
+  );
+
+  const noPromoVisitors = expectedDailyVisitors({ ...biz1, promotionEndDay: null }, building, s1.productPrices, s1.day);
+  const promoVisitors = expectedDailyVisitors(biz1, building, s1.productPrices, s1.day);
+  check(
+    "an active promotion boosts expected visitors by exactly 1.5x",
+    Math.abs(promoVisitors / noPromoVisitors - 1.5) < 1e-9
+  );
+
+  while (useGameStore.getState().day <= biz1.promotionEndDay) {
+    useGameStore.getState().nextDay();
+  }
+  const sExpired = useGameStore.getState();
+  const bizExpired = sExpired.businesses.find((b) => b.id === biz.id);
+  check(
+    "promotion is no longer active once its window has passed",
+    !isPromotionActive(bizExpired, sExpired.day)
+  );
+
+  const balancePreSecond = sExpired.bankBalance;
+  if (balancePreSecond >= cost) {
+    useGameStore.getState().runPromotion({ businessId: biz.id });
+    check(
+      "a fresh campaign can start once the previous one expired",
+      useGameStore.getState().bankBalance === balancePreSecond - cost
+    );
+  } else {
+    console.log("  (skipped: insufficient funds to start a second campaign here)");
+  }
+}
+
+// ---------------------------------------------------------------------
 section("setProductPrice / demandMultiplier");
 {
   const s0 = useGameStore.getState();
@@ -481,6 +586,21 @@ section("30-day soak (no NaN/Infinity, news capped)");
   );
   check("lastDaySummary fields finite", Object.values(s.lastDaySummary).every((v) => typeof v !== "number" || isFinite_(v)));
   check("news capped at 30", s.news.length <= 30);
+  check("satisfaction stays within [0,100] for every business", s.businesses.every((b) => b.satisfaction >= 0 && b.satisfaction <= 100));
+  check(
+    "trafficHistory capped at 30 entries per business",
+    s.businesses.every((b) => (b.trafficHistory ?? []).length <= 30)
+  );
+  check(
+    "trafficHistory entries are sane (finite non-negative visitors, strictly increasing day)",
+    s.businesses.every((b) => {
+      const h = b.trafficHistory ?? [];
+      return (
+        h.every((e) => isFinite_(e.visitors) && e.visitors >= 0) &&
+        h.every((e, i) => i === 0 || e.day > h[i - 1].day)
+      );
+    })
+  );
   console.log(`  final day=${s.day} bankBalance=${s.bankBalance.toFixed(2)}`);
 }
 

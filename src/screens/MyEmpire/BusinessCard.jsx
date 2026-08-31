@@ -1,39 +1,27 @@
-import { useState } from "react";
-import { Briefcase, MapPin, Banknote, Gauge, ChevronRight, TrendingUp } from "lucide-react";
+import { Briefcase, MapPin, Banknote, Gauge, ChevronRight } from "lucide-react";
 import { motion } from "framer-motion";
 import { Card } from "../../components/ui/Card";
 import { Badge } from "../../components/ui/Badge";
 import { IconRow } from "../../components/ui/IconRow";
 import { AnimatedMoney } from "../../components/ui/AnimatedMoney";
 import { BusinessTypeIcon } from "../../components/ui/BusinessTypeIcon";
-import { PillButton } from "../../components/ui/Button";
-import { useGameStore } from "../../state/gameStore";
-import { useCurrencyStore } from "../../state/currencyStore";
-import { formatMoney } from "../../lib/format";
-import { capacityUpgrade } from "../../lib/economy";
+import { useUiStore } from "../../state/uiStore";
 import { buildingById } from "../../data/buildings";
-import { ProductsModal } from "./ProductsModal";
 
 const cardTransition = { type: "spring", stiffness: 380, damping: 32, mass: 0.6 };
 
 export function BusinessCard({ business }) {
   const { name, type, active, dailyEarnings, currentCapacity, buildingId } = business;
-  const bankBalance = useGameStore((s) => s.bankBalance);
-  const investInCapacity = useGameStore((s) => s.investInCapacity);
-  const currency = useCurrencyStore((s) => s.currency);
-  const [pricingOpen, setPricingOpen] = useState(false);
+  const openBusinessDetail = useUiStore((s) => s.openBusinessDetail);
 
   const building = buildingById(buildingId);
-  const upgrade = building ? capacityUpgrade(business, building) : null;
-  const atMax = building && !upgrade;
-  const canAffordUpgrade = upgrade ? bankBalance >= upgrade.cost : false;
 
   return (
     <motion.div layout initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={cardTransition}>
       <Card className="flex flex-col">
         <button
           type="button"
-          onClick={() => setPricingOpen(true)}
+          onClick={() => openBusinessDetail(business.id)}
           className="-m-1 flex items-center gap-4 rounded-2xl p-1 text-left transition-colors hover:bg-surface-sunken"
         >
           <BusinessTypeIcon type={type} />
@@ -65,28 +53,7 @@ export function BusinessCard({ business }) {
 
           <ChevronRight size={18} className="shrink-0 text-ink-faint" />
         </button>
-
-        {building ? (
-          <div className="mt-3 flex items-center justify-between gap-3 border-t border-border pt-3">
-            <p className="text-[12.5px] text-ink-faint">
-              {atMax
-                ? "At building capacity"
-                : `+${upgrade.step}/hr for ${formatMoney(upgrade.cost, { currency })}`}
-            </p>
-            <PillButton
-              size="sm"
-              variant="outline"
-              icon={TrendingUp}
-              disabled={atMax || !canAffordUpgrade}
-              onClick={() => investInCapacity({ businessId: business.id })}
-            >
-              Invest in Capacity
-            </PillButton>
-          </div>
-        ) : null}
       </Card>
-
-      <ProductsModal business={pricingOpen ? business : null} onClose={() => setPricingOpen(false)} />
     </motion.div>
   );
 }

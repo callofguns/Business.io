@@ -14,6 +14,22 @@ export function visitorsPerHour(business, building) {
   return business.currentCapacity * utilization(building) * t.throughputFactor;
 }
 
+// Expected daily *visitors* (no noise) -- the shared traffic number behind
+// both revenue and the Business Detail traffic chart. Every non-price
+// factor that moves footfall (demand from pricing, satisfaction, an active
+// promotion) multiplies in here; revenue then just layers price on top.
+//
+// `day` is only needed to know whether a promotion is currently active
+// (see isPromotionActive) -- callers previewing a business that doesn't
+// exist yet can omit it, which correctly treats promotion as inactive.
+export function expectedDailyVisitors(business, building, productPrices, day) {
+  const t = BUSINESS_TYPES[business.type];
+  const demand = demandMultiplier(business, productPrices);
+  const satisfaction = satisfactionMultiplier(business.satisfaction ?? SATISFACTION_START);
+  const promo = promotionMultiplier(business, day);
+  return visitorsPerHour(business, building) * demand * satisfaction * promo * t.operatingHours;
+}
+
 // Deterministic expected revenue (no daily noise) -- used for UI estimates
 // ("~$X/day" previews) and as the basis for capacity-upgrade pricing, so
 // those numbers don't jitter between renders.
@@ -24,18 +40,31 @@ export function visitorsPerHour(business, building) {
 // existed); pricing away from market trades off price-per-sale against
 // how many customers actually buy. See demandMultiplier's own comment for
 // the shape of that curve.
-export function expectedDailyRevenue(business, building, productPrices) {
+export function expectedDailyRevenue(business, building, productPrices, day) {
   const t = BUSINESS_TYPES[business.type];
   const avgPrice = averageEffectivePrice(business, productPrices);
-  const demand = demandMultiplier(business, productPrices);
-  return visitorsPerHour(business, building) * demand * t.operatingHours * t.unitsPerVisitor * avgPrice;
+  return expectedDailyVisitors(business, building, productPrices, day) * t.unitsPerVisitor * avgPrice;
 }
 
 export const DAILY_VARIANCE = 0.1; // +/- 10% day-to-day noise
 
-export function rollDailyRevenue(business, building, productPrices) {
+// Rolls one day's noise against *visitors* (not revenue directly), then
+// derives revenue from that same noised visitor count -- so the traffic
+// chart and the earnings number always agree on how the day actually went,
+// rather than each rolling independent noise.
+export function rollDailyOutcome(business, building, productPrices, day) {
+  const t = BUSINESS_TYPES[business.type];
   const noise = 1 - DAILY_VARIANCE + Math.random() * DAILY_VARIANCE * 2;
-  return Math.round(expectedDailyRevenue(business, building, productPrices) * noise);
+  const visitors = Math.round(expectedDailyVisitors(business, building, productPrices, day) * noise);
+  const avgPrice = averageEffectivePrice(business, productPrices);
+  const revenue = Math.round(visitors * t.unitsPerVisitor * avgPrice);
+  return { revenue, visitors };
+}
+
+// Thin wrapper for callers that only need the revenue half (verify script,
+// any future one-off use) -- see rollDailyOutcome for the shared roll.
+export function rollDailyRevenue(business, building, productPrices, day) {
+  return rollDailyOutcome(business, building, productPrices, day).revenue;
 }
 
 // --- Product market prices ----------------------------------------------
@@ -129,12 +158,74 @@ export function averageEffectivePrice(business, productPrices) {
 // PRICE_MAX_MULTIPLIER if it doesn't feel right in play.
 export const PRICE_MAX_MULTIPLIER = 2;
 
-export function demandMultiplier(business, productPrices) {
+// effectivePrice / market -- 1 means priced exactly at market. Exported on
+// its own (not just folded into demandMultiplier) because satisfaction's
+// daily drift target also depends on it -- see satisfactionTarget.
+export function priceRatio(business, productPrices) {
   const effective = averageEffectivePrice(business, productPrices);
   const market = averageProductPrice(business.type, productPrices);
   if (market <= 0) return 1;
-  const ratio = effective / market;
+  return effective / market;
+}
+
+export function demandMultiplier(business, productPrices) {
+  const ratio = priceRatio(business, productPrices);
   return Math.max(0, Math.min(PRICE_MAX_MULTIPLIER, PRICE_MAX_MULTIPLIER - ratio));
+}
+
+// --- Satisfaction (reputation) --------------------------------------------
+//
+// A slow-moving 0-100 score, separate from the immediate price->demand
+// curve above. Each day it drifts by SATISFACTION_STEP toward a target set
+// by how the business is currently priced: at or below market it drifts up
+// toward a happy ceiling; the more it overcharges, the lower the target
+// falls (floored, not straight to 0 -- one bad pricing day doesn't tank
+// years of goodwill). It then feeds back into visitor volume as a second,
+// smaller multiplier on top of the pricing-driven demand curve -- reputation
+// matters, but pricing-of-the-day still dominates.
+export const SATISFACTION_MIN = 0;
+export const SATISFACTION_MAX = 100;
+export const SATISFACTION_START = 50;
+export const SATISFACTION_STEP = 1; // points/day drift toward target
+export const SATISFACTION_TARGET_AT_MARKET = 70;
+export const SATISFACTION_TARGET_FLOOR = 20;
+
+export function satisfactionTarget(ratio) {
+  const overchargePenalty = Math.max(0, ratio - 1) * 100;
+  return Math.max(SATISFACTION_TARGET_FLOOR, SATISFACTION_TARGET_AT_MARKET - overchargePenalty);
+}
+
+export function stepSatisfaction(current, target) {
+  if (current === target) return current;
+  const next = current < target ? current + SATISFACTION_STEP : current - SATISFACTION_STEP;
+  return Math.max(SATISFACTION_MIN, Math.min(SATISFACTION_MAX, next));
+}
+
+// 0.85x at 0, 1.0x (neutral) at the 50 starting score, 1.15x at 100.
+export function satisfactionMultiplier(satisfaction) {
+  return 0.85 + satisfaction * 0.003;
+}
+
+// --- Promotions -------------------------------------------------------
+//
+// A time-limited marketing campaign a business can run: pay up front, get
+// a flat traffic boost for a few days, then it wears off. Cost scales with
+// the building's daily rent so it stays proportional across every tier,
+// the same way buyPrice/rentDeposit already do in data/buildings.js.
+export const PROMOTION_COST_MULTIPLIER = 5;
+export const PROMOTION_DURATION_DAYS = 3;
+export const PROMOTION_BOOST = 1.5;
+
+export function promotionCost(building) {
+  return Math.round(building.dailyRent * PROMOTION_COST_MULTIPLIER);
+}
+
+export function isPromotionActive(business, day) {
+  return business?.promotionEndDay != null && day != null && day <= business.promotionEndDay;
+}
+
+export function promotionMultiplier(business, day) {
+  return isPromotionActive(business, day) ? PROMOTION_BOOST : 1;
 }
 
 // --- Capacity investment --------------------------------------------------
