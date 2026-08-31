@@ -29,6 +29,10 @@ const {
   stepSatisfaction,
   promotionCost,
   isPromotionActive,
+  taxOnProfit,
+  isTaxPaymentDue,
+  TAX_RATE,
+  TAX_PERIOD_DAYS,
 } = await import("../src/lib/economy.js");
 const { weekdayIndex } = await import("../src/lib/format.js");
 
@@ -88,6 +92,15 @@ check(
   "office rent path affordable at start ($50,000)",
   cheapestOffice.rentDeposit + agencyCost <= 50000
 );
+
+// ---------------------------------------------------------------------
+section("Initial store state (tax fields)");
+{
+  const s = useGameStore.getState();
+  check("taxAccrued starts at 0", s.taxAccrued === 0);
+  check("taxHistory starts empty", s.taxHistory.length === 0);
+  check("lastTaxPaymentDay starts on day 1", s.lastTaxPaymentDay === 1);
+}
 
 // ---------------------------------------------------------------------
 section("acquireBuilding");
@@ -451,6 +464,63 @@ section("Promotions");
 }
 
 // ---------------------------------------------------------------------
+section("Taxes");
+{
+  // Pure formula checks
+  check("taxOnProfit is 15% of a positive profit", taxOnProfit(1000) === 150);
+  check("taxOnProfit floors a loss to 0 tax", taxOnProfit(-500) === 0);
+  check("isTaxPaymentDue false before the period elapses", !isTaxPaymentDue(1 + TAX_PERIOD_DAYS - 1, 1));
+  check("isTaxPaymentDue true once the period elapses", isTaxPaymentDue(1 + TAX_PERIOD_DAYS, 1));
+
+  const s0 = useGameStore.getState();
+  const accruedBefore = s0.taxAccrued;
+  check("tax has been accruing from daily profits so far", accruedBefore > 0);
+  check("no automatic payment has fired yet (well under the period)", s0.taxHistory.length === 0);
+
+  // payTaxesNow guard: can't pay more than the bank holds
+  useGameStore.setState({ bankBalance: 0 });
+  useGameStore.getState().payTaxesNow();
+  check("payTaxesNow is a no-op when unaffordable", useGameStore.getState().taxAccrued === accruedBefore);
+
+  // restore funds and pay for real
+  useGameStore.setState({ bankBalance: 500000 });
+  const balanceBeforePay = useGameStore.getState().bankBalance;
+  const dayBeforePay = useGameStore.getState().day;
+  useGameStore.getState().payTaxesNow();
+  const s1 = useGameStore.getState();
+  const paidAmount = Math.round(accruedBefore);
+  check("payTaxesNow deducts the rounded accrued amount", s1.bankBalance === balanceBeforePay - paidAmount);
+  check("payTaxesNow resets taxAccrued to 0", s1.taxAccrued === 0);
+  check("payTaxesNow resets the payment countdown", s1.lastTaxPaymentDay === dayBeforePay);
+  check(
+    "payTaxesNow records a history entry",
+    s1.taxHistory.length === 1 && s1.taxHistory[0].amount === paidAmount
+  );
+  check(
+    "payTaxesNow news entry recorded",
+    s1.news[0].icon === "receipt" && s1.news[0].title.includes("early")
+  );
+
+  // paying again immediately (nothing owed) is a no-op
+  const balanceAfterFirstPay = s1.bankBalance;
+  useGameStore.getState().payTaxesNow();
+  check("payTaxesNow with nothing owed is a no-op", useGameStore.getState().bankBalance === balanceAfterFirstPay);
+
+  // advance TAX_PERIOD_DAYS and confirm an automatic payment fires
+  const dayAtReset = useGameStore.getState().lastTaxPaymentDay;
+  while (useGameStore.getState().day < dayAtReset + TAX_PERIOD_DAYS) {
+    useGameStore.getState().nextDay();
+  }
+  const s2 = useGameStore.getState();
+  check("an automatic payment fired once the period elapsed", s2.taxHistory.length === 2);
+  check("automatic payment resets the countdown", s2.lastTaxPaymentDay === dayAtReset + TAX_PERIOD_DAYS);
+  check(
+    "lastDaySummary.otherExpenses matches the automatic payment",
+    s2.lastDaySummary.otherExpenses === s2.taxHistory[0].amount
+  );
+}
+
+// ---------------------------------------------------------------------
 section("setProductPrice / demandMultiplier");
 {
   const s0 = useGameStore.getState();
@@ -601,6 +671,12 @@ section("30-day soak (no NaN/Infinity, news capped)");
       );
     })
   );
+  check("taxAccrued finite and non-negative", isFinite_(s.taxAccrued) && s.taxAccrued >= 0);
+  check(
+    "taxHistory entries finite and non-negative",
+    s.taxHistory.every((e) => isFinite_(e.amount) && e.amount >= 0)
+  );
+  console.log(`  tax: accrued=${s.taxAccrued.toFixed(2)} history=${s.taxHistory.length} entries`);
   console.log(`  final day=${s.day} bankBalance=${s.bankBalance.toFixed(2)}`);
 }
 

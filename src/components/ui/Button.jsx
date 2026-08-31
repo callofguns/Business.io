@@ -15,7 +15,7 @@ const SIZES = {
   lg: "h-14 px-6 text-[16px]",
 };
 
-const press = { type: "spring", stiffness: 500, damping: 28, mass: 0.6 };
+const press = { type: "spring", stiffness: 650, damping: 30, mass: 0.5 };
 
 export function PillButton({
   children,

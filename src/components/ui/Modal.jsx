@@ -3,8 +3,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
 import clsx from "clsx";
 
-const backdropTransition = { duration: 0.18, ease: "easeOut" };
-const panelTransition = { type: "spring", stiffness: 340, damping: 30, mass: 0.8 };
+const backdropTransition = { duration: 0.12, ease: "easeOut" };
+const panelTransition = { type: "spring", stiffness: 520, damping: 32, mass: 0.6 };
 
 // Shared centered-dialog shell (backdrop + spring-in panel + Escape/backdrop
 // to close) used by Settings and the "Start New Business" picker.

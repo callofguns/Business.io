@@ -60,7 +60,10 @@ npm run dev
 - [ ] Stage 5 — Hiring flow (full flow — capacity growth already has a lightweight stub)
 - [ ] Stage 6 — Finance Manager: stock market
 - [ ] Stage 7 — Real estate investments
-- [ ] Stage 8 — Tax Office
+- [x] Stage 8 — Tax Office: a flat 15% tax on daily net business profit (revenue minus rent)
+  accrues automatically and is filed — deducted from your bank, shown as the Day Summary's
+  "Other Expenses" line — every 30 days, or any time from the Tax Office screen's "Pay Now".
+  See `src/lib/economy.js` for the rate/cadence formulas.
 - [ ] Stage 9 — Rivals / leaderboard
 
 ## Branch workflow

@@ -5,7 +5,7 @@ import { useAuthStore } from "../../state/authStore";
 import { PillButton } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 
-const cardTransition = { type: "spring", stiffness: 300, damping: 28, mass: 0.8 };
+const cardTransition = { type: "spring", stiffness: 460, damping: 30, mass: 0.6 };
 
 export function Login() {
   const login = useAuthStore((s) => s.login);

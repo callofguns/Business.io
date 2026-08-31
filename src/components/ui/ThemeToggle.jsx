@@ -3,14 +3,14 @@ import { Sun, Moon } from "lucide-react";
 import clsx from "clsx";
 import { useThemeStore } from "../../state/themeStore";
 
-const thumbTransition = { type: "spring", stiffness: 500, damping: 32, mass: 0.7 };
+const thumbTransition = { type: "spring", stiffness: 650, damping: 34, mass: 0.55 };
 
 // A plain CSS transition with a slight overshoot, so the icon crossfade has
 // spring-like bounce without being a framer-motion `animate` value nested
 // inside the thumb's `layout`-animated parent — nesting an independent
 // framer spring there was fighting the parent's FLIP animation and left the
 // icons stuck mid-fade.
-const iconTransitionClass = "transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)]";
+const iconTransitionClass = "transition-all duration-200 ease-[cubic-bezier(0.34,1.56,0.64,1)]";
 
 export function ThemeToggle() {
   const theme = useThemeStore((s) => s.theme);

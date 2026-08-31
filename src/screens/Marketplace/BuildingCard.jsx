@@ -11,7 +11,7 @@ import { useCurrencyStore } from "../../state/currencyStore";
 import { useUiStore } from "../../state/uiStore";
 import { formatMoney } from "../../lib/format";
 
-const cardTransition = { type: "spring", stiffness: 380, damping: 32, mass: 0.6 };
+const cardTransition = { type: "spring", stiffness: 560, damping: 34, mass: 0.45 };
 
 export function BuildingCard({ building, view, onAcquire }) {
   const bankBalance = useGameStore((s) => s.bankBalance);

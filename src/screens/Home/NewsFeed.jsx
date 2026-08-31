@@ -10,6 +10,7 @@ import {
   Newspaper,
   Package,
   Megaphone,
+  Receipt,
 } from "lucide-react";
 
 const ICONS = {
@@ -22,6 +23,7 @@ const ICONS = {
   newspaper: Newspaper,
   package: Package,
   megaphone: Megaphone,
+  receipt: Receipt,
 };
 
 const TILE_TONES = {
@@ -37,7 +39,7 @@ function relativeDayLabel(entryDay, currentDay) {
   return `${diff}d ago`;
 }
 
-const itemTransition = { type: "spring", stiffness: 380, damping: 34, mass: 0.6 };
+const itemTransition = { type: "spring", stiffness: 560, damping: 36, mass: 0.45 };
 
 export function NewsFeed({ entries, currentDay }) {
   return (

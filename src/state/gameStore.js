@@ -16,6 +16,9 @@ import {
   promotionCost,
   isPromotionActive,
   PROMOTION_DURATION_DAYS,
+  taxOnProfit,
+  isTaxPaymentDue,
+  TAX_RATE,
 } from "../lib/economy";
 
 let newsIdSeq = 1;
@@ -55,6 +58,15 @@ const INITIAL_STATE = {
   // Sunday inside nextDay().
   productPrices: seedProductPrices(),
   lastPriceUpdateDay: 1,
+  // Flat TAX_RATE of daily net business profit (revenue - rent) accrues
+  // here every day; paid out (added to lastDaySummary.otherExpenses,
+  // pushed to taxHistory, reset to 0) either automatically every
+  // TAX_PERIOD_DAYS (see nextDay) or early via payTaxesNow().
+  taxAccrued: 0,
+  // { day, amount }[], newest first, capped -- the Tax Office's payment
+  // history.
+  taxHistory: [],
+  lastTaxPaymentDay: 1,
   // Set by nextDay() and read by the day-summary modal.
   lastDaySummary: null,
   // Placeholders for future stages — kept here now so later work only adds
@@ -225,6 +237,34 @@ export const useGameStore = create((set, get) => ({
     });
   },
 
+  // Voluntary early payment of the accrued tax balance, from the Tax
+  // Office's "Pay Now" -- also resets the TAX_PERIOD_DAYS countdown from
+  // today, same as an automatic payment would.
+  payTaxesNow: () => {
+    const state = get();
+    const amount = Math.round(state.taxAccrued);
+    if (amount <= 0) return; // nothing owed
+    if (state.bankBalance < amount) return;
+
+    const currency = useCurrencyStore.getState().currency;
+    set({
+      bankBalance: state.bankBalance - amount,
+      taxAccrued: 0,
+      lastTaxPaymentDay: state.day,
+      taxHistory: [{ day: state.day, amount }, ...state.taxHistory].slice(0, 24),
+      news: [
+        makeNewsEntry({
+          icon: "receipt",
+          title: "You paid your taxes early",
+          subtitle: `-${formatMoney(amount, { currency })} · accrued balance cleared`,
+          tone: "bad",
+          day: state.day,
+        }),
+        ...state.news,
+      ].slice(0, 30),
+    });
+  },
+
   // price: null (or omitted) resets the product back to following the live
   // market price. Otherwise clamped to >= 0 -- no upper bound (the player's
   // call), but a negative price makes no sense.
@@ -250,7 +290,8 @@ export const useGameStore = create((set, get) => ({
   },
 
   nextDay: () => {
-    const { day, bankBalance, businesses, acquiredBuildings, productPrices, news } = get();
+    const { day, bankBalance, businesses, acquiredBuildings, productPrices, news, taxAccrued, taxHistory, lastTaxPaymentDay } =
+      get();
     const newDay = day + 1;
     const currency = useCurrencyStore.getState().currency;
     const isSunday = weekdayIndex(newDay) === 6;
@@ -277,7 +318,15 @@ export const useGameStore = create((set, get) => ({
       return sum + (building?.dailyRent ?? 0);
     }, 0);
 
-    const otherExpenses = 0;
+    const accruedAfterToday = taxAccrued + taxOnProfit(businessIncome - rent);
+    const taxDue = isTaxPaymentDue(newDay, lastTaxPaymentDay);
+    const otherExpenses = taxDue ? Math.round(accruedAfterToday) : 0;
+    const nextTaxAccrued = taxDue ? 0 : accruedAfterToday;
+    const nextLastTaxPaymentDay = taxDue ? newDay : lastTaxPaymentDay;
+    const nextTaxHistory = taxDue
+      ? [{ day: newDay, amount: otherExpenses }, ...taxHistory].slice(0, 24)
+      : taxHistory;
+
     const netChange = businessIncome - rent - otherExpenses;
     const newBalance = bankBalance + netChange;
 
@@ -316,6 +365,17 @@ export const useGameStore = create((set, get) => ({
         })
       );
     }
+    if (taxDue && otherExpenses > 0) {
+      entries.push(
+        makeNewsEntry({
+          icon: "receipt",
+          title: "Taxes filed",
+          subtitle: `-${formatMoney(otherExpenses, { currency })} · ${Math.round(TAX_RATE * 100)}% of accrued profit`,
+          tone: "bad",
+          day: newDay,
+        })
+      );
+    }
     if (newBalance < 0) {
       entries.push(
         makeNewsEntry({
@@ -334,6 +394,9 @@ export const useGameStore = create((set, get) => ({
       businesses: updatedBusinesses,
       productPrices: prices,
       lastPriceUpdateDay: isSunday ? newDay : get().lastPriceUpdateDay,
+      taxAccrued: nextTaxAccrued,
+      taxHistory: nextTaxHistory,
+      lastTaxPaymentDay: nextLastTaxPaymentDay,
       news: [...entries, ...news].slice(0, 30),
       lastDaySummary: {
         day: newDay,

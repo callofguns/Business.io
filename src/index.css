@@ -103,7 +103,7 @@ body {
 *::before,
 *::after {
   transition-property: background-color, border-color, color;
-  transition-duration: 200ms;
+  transition-duration: 140ms;
   transition-timing-function: ease-out;
 }
 

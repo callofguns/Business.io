@@ -15,7 +15,7 @@ export function WeekdayStrip({ day }) {
               <motion.div
                 layoutId="weekday-highlight"
                 className="absolute inset-0 rounded-full bg-brand-500"
-                transition={{ type: "spring", stiffness: 420, damping: 32 }}
+                transition={{ type: "spring", stiffness: 620, damping: 34 }}
               />
             ) : null}
             <span
