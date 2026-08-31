@@ -6,9 +6,16 @@ import { buildingById } from "../data/buildings";
 import {
   seedProductPrices,
   rollProductPrices,
-  rollDailyRevenue,
+  rollDailyOutcome,
   startingCapacity,
   capacityUpgrade,
+  priceRatio,
+  satisfactionTarget,
+  stepSatisfaction,
+  SATISFACTION_START,
+  promotionCost,
+  isPromotionActive,
+  PROMOTION_DURATION_DAYS,
 } from "../lib/economy";
 
 let newsIdSeq = 1;
@@ -129,6 +136,16 @@ export const useGameStore = create((set, get) => ({
       // Sparse { [productId]: price } -- unset products just follow the
       // live market price (see effectivePrice in lib/economy.js).
       customPrices: {},
+      // 0-100 reputation score, drifts daily toward a pricing-driven target
+      // (see satisfactionTarget/stepSatisfaction in lib/economy.js).
+      satisfaction: SATISFACTION_START,
+      // Set by runPromotion(); a day <= this counts as an active campaign
+      // (see isPromotionActive). Left stale after expiry -- only ever read
+      // relative to the current day, never checked for null-ness alone.
+      promotionEndDay: null,
+      // { day, visitors }[], newest last, capped to the last 30 entries --
+      // backs the Business Detail traffic chart.
+      trafficHistory: [],
     };
 
     set({
@@ -177,6 +194,37 @@ export const useGameStore = create((set, get) => ({
     });
   },
 
+  runPromotion: ({ businessId }) => {
+    const state = get();
+    const business = state.businesses.find((b) => b.id === businessId);
+    if (!business) return;
+    const building = buildingById(business.buildingId);
+    if (!building) return;
+    if (isPromotionActive(business, state.day)) return; // one campaign at a time
+
+    const cost = promotionCost(building);
+    if (state.bankBalance < cost) return;
+
+    const currency = useCurrencyStore.getState().currency;
+    const endDay = state.day + PROMOTION_DURATION_DAYS;
+    set({
+      bankBalance: state.bankBalance - cost,
+      businesses: state.businesses.map((b) =>
+        b.id === businessId ? { ...b, promotionEndDay: endDay } : b
+      ),
+      news: [
+        makeNewsEntry({
+          icon: "megaphone",
+          title: `${business.name} launched a promotion`,
+          subtitle: `-${formatMoney(cost, { currency })} · +50% traffic for ${PROMOTION_DURATION_DAYS} days`,
+          tone: "good",
+          day: state.day,
+        }),
+        ...state.news,
+      ].slice(0, 30),
+    });
+  },
+
   // price: null (or omitted) resets the product back to following the live
   // market price. Otherwise clamped to >= 0 -- no upper bound (the player's
   // call), but a negative price makes no sense.
@@ -215,9 +263,12 @@ export const useGameStore = create((set, get) => ({
       const building = buildingById(b.buildingId);
       if (!building) return b;
       activeCount += 1;
-      const earned = rollDailyRevenue(b, building, prices);
-      businessIncome += earned;
-      return { ...b, dailyEarnings: earned };
+      const { revenue, visitors } = rollDailyOutcome(b, building, prices, newDay);
+      businessIncome += revenue;
+      const target = satisfactionTarget(priceRatio(b, prices));
+      const satisfaction = stepSatisfaction(b.satisfaction ?? SATISFACTION_START, target);
+      const trafficHistory = [...(b.trafficHistory ?? []), { day: newDay, visitors }].slice(-30);
+      return { ...b, dailyEarnings: revenue, satisfaction, trafficHistory };
     });
 
     const rent = acquiredBuildings.reduce((sum, a) => {

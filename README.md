@@ -51,7 +51,12 @@ npm run dev
   trades fewer customers for more margin per sale, pricing below trades margin for turnout
   (revenue peaks exactly at market price and falls off symmetrically either side). Reset any
   product back to auto-following the market with one click.
-- [ ] Stage 3 — Business detail: traffic chart, satisfaction & promotion stats
+- [x] Stage 3 — Business detail: click any business card to open its own page — daily
+  visitors traffic chart, a 0-100 satisfaction (reputation) score that drifts daily toward a
+  target set by your pricing and feeds back into demand, and a paid Promotion campaign
+  (cost scales with the building's rent) for a temporary +50% traffic boost. Capacity
+  investing and pricing (formerly on the My Empire card) now live here too. See
+  `src/lib/economy.js` for the satisfaction/promotion formulas.
 - [ ] Stage 5 — Hiring flow (full flow — capacity growth already has a lightweight stub)
 - [ ] Stage 6 — Finance Manager: stock market
 - [ ] Stage 7 — Real estate investments
