@@ -18,7 +18,7 @@ const TYPE_FILTERS = [
   { key: "office", label: "Office" },
 ];
 
-const tabTransition = { type: "spring", stiffness: 420, damping: 34 };
+const tabTransition = { type: "spring", stiffness: 620, damping: 36 };
 
 export function Marketplace() {
   const acquiredBuildings = useGameStore((s) => s.acquiredBuildings);

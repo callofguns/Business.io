@@ -7,6 +7,7 @@ import { IconRow } from "../../components/ui/IconRow";
 import { AnimatedMoney } from "../../components/ui/AnimatedMoney";
 import { BusinessTypeIcon } from "../../components/ui/BusinessTypeIcon";
 import { PillButton } from "../../components/ui/Button";
+import { StatCard } from "../../components/ui/StatCard";
 import { useGameStore } from "../../state/gameStore";
 import { useUiStore } from "../../state/uiStore";
 import { useCurrencyStore } from "../../state/currencyStore";
@@ -15,26 +16,6 @@ import { buildingById } from "../../data/buildings";
 import { capacityUpgrade, promotionCost, isPromotionActive } from "../../lib/economy";
 import { TrafficChart } from "./TrafficChart";
 import { ProductsModal } from "../MyEmpire/ProductsModal";
-
-function StatCard({ icon: Icon, tone = "brand", label, value }) {
-  const toneClasses = {
-    brand: "bg-brand-50 text-brand-600",
-    good: "bg-good-50 text-good-600",
-    warn: "bg-warn-50 text-warn-600",
-    bad: "bg-bad-50 text-bad-600",
-  };
-  return (
-    <Card className="flex items-center gap-3 p-4">
-      <span className={clsx("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", toneClasses[tone])}>
-        <Icon size={18} strokeWidth={2.25} />
-      </span>
-      <div className="min-w-0">
-        <p className="text-[12px] font-semibold text-ink-faint">{label}</p>
-        <p className="truncate text-[16px] font-bold text-ink">{value}</p>
-      </div>
-    </Card>
-  );
-}
 
 function satisfactionTone(score) {
   if (score >= 70) return "good";

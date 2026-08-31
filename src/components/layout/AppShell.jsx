@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { Sidebar } from "./Sidebar";
 
-const screenTransition = { type: "spring", stiffness: 300, damping: 32, mass: 0.7 };
+const screenTransition = { type: "spring", stiffness: 480, damping: 34, mass: 0.5 };
 
 export function AppShell({ screen, onNavigate, children }) {
   return (

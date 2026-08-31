@@ -8,7 +8,7 @@ import { BusinessTypeIcon } from "../../components/ui/BusinessTypeIcon";
 import { useUiStore } from "../../state/uiStore";
 import { buildingById } from "../../data/buildings";
 
-const cardTransition = { type: "spring", stiffness: 380, damping: 32, mass: 0.6 };
+const cardTransition = { type: "spring", stiffness: 560, damping: 34, mass: 0.45 };
 
 export function BusinessCard({ business }) {
   const { name, type, active, dailyEarnings, currentCapacity, buildingId } = business;

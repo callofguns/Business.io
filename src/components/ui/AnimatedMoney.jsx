@@ -9,7 +9,7 @@ import { useCurrencyStore } from "../../state/currencyStore";
 export function AnimatedMoney({ value, className, decimals = false }) {
   const currency = useCurrencyStore((s) => s.currency);
   const motionValue = useMotionValue(value);
-  const spring = useSpring(motionValue, { stiffness: 90, damping: 20, mass: 1 });
+  const spring = useSpring(motionValue, { stiffness: 160, damping: 24, mass: 0.8 });
   const [display, setDisplay] = useState(() => formatMoney(value, { decimals, currency }));
 
   useEffect(() => {

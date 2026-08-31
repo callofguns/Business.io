@@ -228,6 +228,29 @@ export function promotionMultiplier(business, day) {
   return isPromotionActive(business, day) ? PROMOTION_BOOST : 1;
 }
 
+// --- Taxes -----------------------------------------------------------
+//
+// A flat tax on daily net business profit (all businesses' revenue minus
+// rent, floored at 0 -- a loss day accrues no tax). It builds up in
+// gameStore's `taxAccrued` every day via taxOnProfit(), but is only
+// actually deducted from the bank on a fixed cadence (see
+// isTaxPaymentDue) or early via the Tax Office's "Pay Now" -- see
+// gameStore.payTaxesNow().
+export const TAX_RATE = 0.15;
+export const TAX_PERIOD_DAYS = 30;
+
+export function taxOnProfit(profit) {
+  return Math.max(0, profit) * TAX_RATE;
+}
+
+// Due once TAX_PERIOD_DAYS have elapsed since the last payment (automatic
+// or an early "Pay Now") -- not a fixed calendar day, so paying early
+// genuinely restarts the countdown rather than double-charging shortly
+// after.
+export function isTaxPaymentDue(day, lastTaxPaymentDay) {
+  return day - lastTaxPaymentDay >= TAX_PERIOD_DAYS;
+}
+
 // --- Capacity investment --------------------------------------------------
 //
 // A business starts able to serve only half of its building's max capacity,
