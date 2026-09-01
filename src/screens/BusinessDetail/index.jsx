@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft, Banknote, Gauge, MapPin, Smile, TrendingUp, Megaphone, Tag } from "lucide-react";
+import { ArrowLeft, Banknote, Gauge, MapPin, Smile, TrendingUp, Megaphone, Tag, Users } from "lucide-react";
 import clsx from "clsx";
 import { Card, SectionHeading } from "../../components/ui/Card";
 import { Badge } from "../../components/ui/Badge";
@@ -13,7 +13,7 @@ import { useUiStore } from "../../state/uiStore";
 import { useCurrencyStore } from "../../state/currencyStore";
 import { formatMoney } from "../../lib/format";
 import { buildingById } from "../../data/buildings";
-import { capacityUpgrade, promotionCost, isPromotionActive } from "../../lib/economy";
+import { dailyWagePerStaff, promotionCost, isPromotionActive } from "../../lib/economy";
 import { TrafficChart } from "./TrafficChart";
 import { ProductsModal } from "../MyEmpire/ProductsModal";
 
@@ -36,7 +36,6 @@ export function BusinessDetail() {
   const bankBalance = useGameStore((s) => s.bankBalance);
   const business = useGameStore((s) => s.businesses.find((b) => b.id === selectedBusinessId));
   const acquiredBuildings = useGameStore((s) => s.acquiredBuildings);
-  const investInCapacity = useGameStore((s) => s.investInCapacity);
   const runPromotion = useGameStore((s) => s.runPromotion);
   const currency = useCurrencyStore((s) => s.currency);
   const [pricingOpen, setPricingOpen] = useState(false);
@@ -63,9 +62,8 @@ export function BusinessDetail() {
   const acquisition = acquiredBuildings.find((a) => a.buildingId === business.buildingId);
   const satisfaction = business.satisfaction ?? 50;
 
-  const upgrade = building ? capacityUpgrade(business, building) : null;
-  const atMax = building && !upgrade;
-  const canAffordUpgrade = upgrade ? bankBalance >= upgrade.cost : false;
+  const staffCount = business.staffCount ?? 0;
+  const dailyWage = dailyWagePerStaff(business.type);
 
   const promoActive = isPromotionActive(business, day);
   const promoCost = building ? promotionCost(building) : 0;
@@ -205,21 +203,18 @@ export function BusinessDetail() {
 
       {building ? (
         <Card className="mt-4">
-          <SectionHeading icon={Gauge} title="Capacity" subtitle="Grow how many customers you can serve" />
+          <SectionHeading icon={Users} title="Staff" subtitle="Hire employees to grow how many customers you can serve" />
           <div className="flex items-center justify-between gap-3">
             <p className="text-[12.5px] text-ink-faint">
-              {atMax
-                ? "At building capacity."
-                : `+${upgrade.step}/hr for ${formatMoney(upgrade.cost, { currency })}`}
+              {staffCount} staff hired · {formatMoney(staffCount * dailyWage, { currency })}/day in wages
             </p>
             <PillButton
               size="sm"
               variant="outline"
-              icon={TrendingUp}
-              disabled={atMax || !canAffordUpgrade}
-              onClick={() => investInCapacity({ businessId: business.id })}
+              icon={Users}
+              onClick={() => setScreen("hiring")}
             >
-              Invest in Capacity
+              Manage Staff
             </PillButton>
           </div>
         </Card>

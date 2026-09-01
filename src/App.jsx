@@ -5,6 +5,7 @@ import { MyEmpire } from "./screens/MyEmpire";
 import { Marketplace } from "./screens/Marketplace";
 import { BusinessDetail } from "./screens/BusinessDetail";
 import { TaxOffice } from "./screens/TaxOffice";
+import { Hiring } from "./screens/Hiring";
 import { Login } from "./screens/Login";
 import { useUiStore } from "./state/uiStore";
 import { useThemeStore, applyTheme } from "./state/themeStore";
@@ -16,6 +17,7 @@ const SCREENS = {
   marketplace: Marketplace,
   businessDetail: BusinessDetail,
   tax: TaxOffice,
+  hiring: Hiring,
 };
 
 export default function App() {

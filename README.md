@@ -54,10 +54,14 @@ npm run dev
 - [x] Stage 3 — Business detail: click any business card to open its own page — daily
   visitors traffic chart, a 0-100 satisfaction (reputation) score that drifts daily toward a
   target set by your pricing and feeds back into demand, and a paid Promotion campaign
-  (cost scales with the building's rent) for a temporary +50% traffic boost. Capacity
-  investing and pricing (formerly on the My Empire card) now live here too. See
-  `src/lib/economy.js` for the satisfaction/promotion formulas.
-- [ ] Stage 5 — Hiring flow (full flow — capacity growth already has a lightweight stub)
+  (cost scales with the building's rent) for a temporary +50% traffic boost. Pricing
+  (formerly on the My Empire card) lives here too. See `src/lib/economy.js` for the
+  satisfaction/promotion formulas.
+- [x] Stage 5 — Hiring: a Hiring screen lists every business and lets you hire/fire staff —
+  each hire costs a one-time fee plus a recurring hourly wage (paid daily, shown as a new
+  "Wages" line in the Day Summary and factored into taxable profit) and grows the business's
+  capacity toward its building's max, replacing the old flat-cash capacity-investment stub.
+  See `src/lib/economy.js` for the wage/capacity formulas.
 - [ ] Stage 6 — Finance Manager: stock market
 - [ ] Stage 7 — Real estate investments
 - [x] Stage 8 — Tax Office: a flat 15% tax on daily net business profit (revenue minus rent)

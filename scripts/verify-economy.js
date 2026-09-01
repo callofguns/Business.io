@@ -23,7 +23,11 @@ const { BUSINESS_TYPES, STARTER_BUSINESS_OPTIONS } = await import("../src/data/b
 const {
   expectedDailyRevenue,
   expectedDailyVisitors,
-  capacityUpgrade,
+  staffHireCost,
+  staffFireResult,
+  maxStaffFor,
+  dailyWagePerStaff,
+  totalDailyWages,
   demandMultiplier,
   satisfactionTarget,
   stepSatisfaction,
@@ -188,6 +192,7 @@ section("startBusiness guards");
     "currentCapacity set to half building max",
     biz.currentCapacity === Math.max(8, Math.round(cheapestRetail.customerCapacity * 0.5))
   );
+  check("starts with no staff hired", biz.staffCount === 0);
   check("starts at neutral satisfaction (50)", biz.satisfaction === 50);
   check("starts with no active promotion", biz.promotionEndDay === null);
   check("starts with empty traffic history", Array.isArray(biz.trafficHistory) && biz.trafficHistory.length === 0);
@@ -338,36 +343,81 @@ section("Magnitude table (starter vs top-end, cross-type spread)");
 }
 
 // ---------------------------------------------------------------------
-section("investInCapacity");
+section("Hiring (hireStaff / fireStaff)");
 {
   const s = useGameStore.getState();
   const biz = s.businesses.find((b) => b.type === "Small Shop");
   const building = buildingById(biz.buildingId);
-  const upgrade = capacityUpgrade(biz, building);
+
+  check(
+    "dailyWagePerStaff = hourly rate * operatingHours",
+    dailyWagePerStaff("Small Shop") === Math.round(BUSINESS_TYPES["Small Shop"].operatingHours * 18)
+  );
+  check(
+    "staffFireResult is null with nothing hired yet",
+    staffFireResult({ ...biz, staffCount: 0 }, building) === null
+  );
+
+  const hire = staffHireCost(biz, building);
   const balanceBefore = s.bankBalance;
 
-  s.investInCapacity({ businessId: biz.id });
+  s.hireStaff({ businessId: biz.id });
   const after = useGameStore.getState();
   const bizAfter = after.businesses.find((b) => b.id === biz.id);
-  check("cost deducted matches capacityUpgrade().cost", after.bankBalance === balanceBefore - upgrade.cost);
-  check("capacity increased by step", bizAfter.currentCapacity === upgrade.nextCapacity);
+  check("hire fee deducted", after.bankBalance === balanceBefore - hire.fee);
+  check("staffCount incremented", bizAfter.staffCount === 1);
+  check("capacity increased to match staffCount", bizAfter.currentCapacity === hire.nextCapacity);
 
-  // repeatedly invest until at max, then confirm no-op / clamp
+  // fire that hire back off, confirm no refund of the fee but capacity/count revert
+  const balanceBeforeFire = after.bankBalance;
+  s.fireStaff({ businessId: biz.id });
+  const afterFire = useGameStore.getState();
+  const bizAfterFire = afterFire.businesses.find((b) => b.id === biz.id);
+  check("staffCount decremented", bizAfterFire.staffCount === 0);
+  check("capacity reverted", bizAfterFire.currentCapacity === biz.currentCapacity);
+  check("no refund on firing", afterFire.bankBalance === balanceBeforeFire);
+
+  // firing with nobody hired is a no-op
+  s.fireStaff({ businessId: biz.id });
+  check("firing with no staff is a no-op", useGameStore.getState().businesses.find((b) => b.id === biz.id).staffCount === 0);
+
+  // hire repeatedly until at max capacity, then confirm hiring further is a no-op
   let guard = 0;
   while (guard++ < 50) {
     const cur = useGameStore.getState().businesses.find((b) => b.id === biz.id);
-    if (cur.currentCapacity >= building.customerCapacity) break;
-    useGameStore.getState().investInCapacity({ businessId: biz.id });
+    if (cur.staffCount >= maxStaffFor(building)) break;
+    useGameStore.getState().hireStaff({ businessId: biz.id });
   }
   const maxed = useGameStore.getState().businesses.find((b) => b.id === biz.id);
-  check("clamps exactly at building max", maxed.currentCapacity === building.customerCapacity);
+  check("staffCount clamps at maxStaffFor(building)", maxed.staffCount === maxStaffFor(building));
+  check("capacity clamps exactly at building max", maxed.currentCapacity === building.customerCapacity);
 
   const balanceAtMax = useGameStore.getState().bankBalance;
-  useGameStore.getState().investInCapacity({ businessId: biz.id });
+  useGameStore.getState().hireStaff({ businessId: biz.id });
   check(
-    "further investment at max is a no-op",
-    useGameStore.getState().bankBalance === balanceAtMax
+    "hiring past building max is a no-op",
+    useGameStore.getState().bankBalance === balanceAtMax &&
+      useGameStore.getState().businesses.find((b) => b.id === biz.id).staffCount === maxed.staffCount
   );
+
+  check(
+    "totalDailyWages sums every active business's staffCount * dailyWagePerStaff",
+    totalDailyWages(useGameStore.getState().businesses) ===
+      useGameStore.getState().businesses.reduce(
+        (sum, b) => sum + (b.staffCount ?? 0) * dailyWagePerStaff(b.type),
+        0
+      )
+  );
+
+  // let the staff back go so later sections' magnitude/soak numbers aren't
+  // skewed by this section's hiring
+  guard = 0;
+  while (guard++ < 50) {
+    const cur = useGameStore.getState().businesses.find((b) => b.id === biz.id);
+    if (cur.staffCount <= 0) break;
+    useGameStore.getState().fireStaff({ businessId: biz.id });
+  }
+  check("staff let go back to 0", useGameStore.getState().businesses.find((b) => b.id === biz.id).staffCount === 0);
 }
 
 // ---------------------------------------------------------------------
@@ -644,6 +694,12 @@ section("setProductPrice / demandMultiplier");
 // ---------------------------------------------------------------------
 section("30-day soak (no NaN/Infinity, news capped)");
 {
+  // hire someone so wages are actually exercised through the soak, not left
+  // at a permanent 0 from the Hiring section resetting back to no staff
+  const soakBiz = useGameStore.getState().businesses.find((b) => b.type === "Small Shop");
+  useGameStore.getState().hireStaff({ businessId: soakBiz.id });
+  check("hired for the soak", useGameStore.getState().businesses.find((b) => b.id === soakBiz.id).staffCount === 1);
+
   for (let i = 0; i < 30; i++) {
     useGameStore.getState().nextDay();
   }
@@ -675,6 +731,16 @@ section("30-day soak (no NaN/Infinity, news capped)");
   check(
     "taxHistory entries finite and non-negative",
     s.taxHistory.every((e) => isFinite_(e.amount) && e.amount >= 0)
+  );
+  check("lastDaySummary.wages finite and non-negative", isFinite_(s.lastDaySummary.wages) && s.lastDaySummary.wages >= 0);
+  check("wages actually charged for the hired soak business", s.lastDaySummary.wages > 0);
+  check(
+    "every business's staffCount stays within [0, maxStaffFor(building)]",
+    s.businesses.every((b) => {
+      const building = buildingById(b.buildingId);
+      const count = b.staffCount ?? 0;
+      return building && count >= 0 && count <= maxStaffFor(building);
+    })
   );
   console.log(`  tax: accrued=${s.taxAccrued.toFixed(2)} history=${s.taxHistory.length} entries`);
   console.log(`  final day=${s.day} bankBalance=${s.bankBalance.toFixed(2)}`);

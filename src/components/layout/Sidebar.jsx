@@ -23,7 +23,7 @@ const NAV_ITEMS = [
   { key: "home", label: "Home", icon: Home, enabled: true },
   { key: "empire", label: "My Empire", icon: Building2, enabled: true },
   { key: "marketplace", label: "Marketplace", icon: ShoppingBag, enabled: true },
-  { key: "hiring", label: "Hiring", icon: Users, enabled: false },
+  { key: "hiring", label: "Hiring", icon: Users, enabled: true },
   { key: "finance", label: "Finance Manager", icon: LineChart, enabled: false },
   { key: "realestate", label: "Real Estate", icon: Landmark, enabled: false },
   { key: "tax", label: "Tax Office", icon: Receipt, enabled: true },
