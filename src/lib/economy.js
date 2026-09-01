@@ -114,15 +114,6 @@ export function averageProductPrice(type, productPrices) {
   return sum / products.length;
 }
 
-// Same as averageProductPrice but always uses midpoints, never the live
-// market -- used for capacity-upgrade pricing so that cost doesn't drift
-// with weekly price swings.
-export function averageMidPrice(type) {
-  const products = BUSINESS_TYPES[type].products;
-  const sum = products.reduce((total, product) => total + midPrice(product), 0);
-  return sum / products.length;
-}
-
 // --- Player-set prices ---------------------------------------------------
 //
 // A business can set its own selling price per product (business.
@@ -251,29 +242,75 @@ export function isTaxPaymentDue(day, lastTaxPaymentDay) {
   return day - lastTaxPaymentDay >= TAX_PERIOD_DAYS;
 }
 
-// --- Capacity investment --------------------------------------------------
+// --- Hiring / staff ---------------------------------------------------
 //
-// A business starts able to serve only half of its building's max capacity,
-// and grows toward that max via investInCapacity(). Cost is derived from
-// the revenue the step unlocks (~25 days of it), so payback stays roughly
-// constant across every business type and every building on the ladder,
-// scaling naturally with how good the building/business already is.
-export const CAPACITY_STEP = 5;
-export const CAPACITY_PAYBACK_DAYS = 25;
+// A business starts able to serve only half of its building's max capacity
+// (startingCapacity below) and grows toward that max by hiring staff on the
+// Hiring screen. Staff are a flat headcount (no named roles) -- each hire
+// adds STAFF_CAPACITY_STEP capacity and costs an hourly wage, paid every
+// day the business is open (see dailyWagePerStaff/gameStore.nextDay), plus
+// a one-time hiring fee. Capacity is always *derived* from staffCount
+// (capacityForStaff) rather than stored as an independent running total, so
+// hiring and firing can never drift out of sync with each other -- firing
+// is just staffCount - 1, capacity recomputes on its own.
+export const STAFF_HOURLY_WAGE = 18;
+export const STAFF_CAPACITY_STEP = 5;
+export const STAFF_HIRE_FEE_MULTIPLIER = 10; // one-time fee = 10x that hire's daily wage
 
 export function startingCapacity(building) {
   return Math.max(8, Math.round(building.customerCapacity * 0.5));
 }
 
-export function revenuePerCapacityUnit(type, building) {
-  const t = BUSINESS_TYPES[type];
-  return utilization(building) * t.throughputFactor * t.operatingHours * t.unitsPerVisitor * averageMidPrice(type);
+export function capacityForStaff(building, staffCount) {
+  return Math.min(building.customerCapacity, startingCapacity(building) + staffCount * STAFF_CAPACITY_STEP);
 }
 
-// Returns null when the business is already at its building's max capacity.
-export function capacityUpgrade(business, building) {
-  const step = Math.min(CAPACITY_STEP, building.customerCapacity - business.currentCapacity);
-  if (step <= 0) return null;
-  const cost = Math.round(step * revenuePerCapacityUnit(business.type, building) * CAPACITY_PAYBACK_DAYS);
-  return { step, cost, nextCapacity: business.currentCapacity + step };
+// How many staff a business can usefully hire before it's already serving
+// its building's full capacity -- hiring past this would only add wage cost
+// for no capacity gain, so hireStaff() refuses past this point.
+export function maxStaffFor(building) {
+  return Math.ceil((building.customerCapacity - startingCapacity(building)) / STAFF_CAPACITY_STEP);
+}
+
+export function dailyWagePerStaff(type) {
+  return Math.round(BUSINESS_TYPES[type].operatingHours * STAFF_HOURLY_WAGE);
+}
+
+export function hireFee(type) {
+  return dailyWagePerStaff(type) * STAFF_HIRE_FEE_MULTIPLIER;
+}
+
+// Total daily wage bill across every active, staffed business -- folded
+// into gameStore.nextDay()'s expenses (and into the tax profit basis)
+// alongside rent.
+export function totalDailyWages(businesses) {
+  return businesses.reduce((sum, b) => {
+    if (!b.active || !b.staffCount) return sum;
+    return sum + b.staffCount * dailyWagePerStaff(b.type);
+  }, 0);
+}
+
+// Returns null once the business is already staffed up to its building's
+// max capacity.
+export function staffHireCost(business, building) {
+  const staffCount = business.staffCount ?? 0;
+  if (staffCount >= maxStaffFor(building)) return null;
+  return {
+    fee: hireFee(business.type),
+    dailyWage: dailyWagePerStaff(business.type),
+    nextStaffCount: staffCount + 1,
+    nextCapacity: capacityForStaff(building, staffCount + 1),
+  };
+}
+
+// Returns null when there's no staff left to let go. No refund of the
+// original hire fee (it was a sunk recruiting/training cost) -- only the
+// ongoing wage stops.
+export function staffFireResult(business, building) {
+  const staffCount = business.staffCount ?? 0;
+  if (staffCount <= 0) return null;
+  return {
+    nextStaffCount: staffCount - 1,
+    nextCapacity: capacityForStaff(building, staffCount - 1),
+  };
 }

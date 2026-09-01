@@ -8,7 +8,9 @@ import {
   rollProductPrices,
   rollDailyOutcome,
   startingCapacity,
-  capacityUpgrade,
+  staffHireCost,
+  staffFireResult,
+  totalDailyWages,
   priceRatio,
   satisfactionTarget,
   stepSatisfaction,
@@ -144,6 +146,10 @@ export const useGameStore = create((set, get) => ({
       active: true,
       dailyEarnings: 0,
       currentCapacity: startingCapacity(building),
+      // Headcount hired on the Hiring screen -- currentCapacity is always
+      // kept in lockstep with this via hireStaff/fireStaff (see
+      // capacityForStaff in lib/economy.js), never adjusted independently.
+      staffCount: 0,
       startedDay: state.day,
       // Sparse { [productId]: price } -- unset products just follow the
       // live market price (see effectivePrice in lib/economy.js).
@@ -176,29 +182,60 @@ export const useGameStore = create((set, get) => ({
     });
   },
 
-  investInCapacity: ({ businessId }) => {
+  hireStaff: ({ businessId }) => {
     const state = get();
     const business = state.businesses.find((b) => b.id === businessId);
     if (!business) return;
     const building = buildingById(business.buildingId);
     if (!building) return;
 
-    const upgrade = capacityUpgrade(business, building);
-    if (!upgrade) return; // already at building max
-    if (state.bankBalance < upgrade.cost) return;
+    const result = staffHireCost(business, building);
+    if (!result) return; // already staffed to building max
+    if (state.bankBalance < result.fee) return;
 
     const currency = useCurrencyStore.getState().currency;
     set({
-      bankBalance: state.bankBalance - upgrade.cost,
+      bankBalance: state.bankBalance - result.fee,
       businesses: state.businesses.map((b) =>
-        b.id === businessId ? { ...b, currentCapacity: upgrade.nextCapacity } : b
+        b.id === businessId
+          ? { ...b, staffCount: result.nextStaffCount, currentCapacity: result.nextCapacity }
+          : b
       ),
       news: [
         makeNewsEntry({
-          icon: "trending-up",
-          title: `${business.name} expanded capacity`,
-          subtitle: `-${formatMoney(upgrade.cost, { currency })} · ${upgrade.nextCapacity}/hr capacity`,
+          icon: "users",
+          title: `${business.name} hired a new staff member`,
+          subtitle: `-${formatMoney(result.fee, { currency })} hiring fee · ${formatMoney(result.dailyWage, { currency })}/day wage · ${result.nextCapacity}/hr capacity`,
           tone: "good",
+          day: state.day,
+        }),
+        ...state.news,
+      ].slice(0, 30),
+    });
+  },
+
+  fireStaff: ({ businessId }) => {
+    const state = get();
+    const business = state.businesses.find((b) => b.id === businessId);
+    if (!business) return;
+    const building = buildingById(business.buildingId);
+    if (!building) return;
+
+    const result = staffFireResult(business, building);
+    if (!result) return; // no staff left to let go
+
+    set({
+      businesses: state.businesses.map((b) =>
+        b.id === businessId
+          ? { ...b, staffCount: result.nextStaffCount, currentCapacity: result.nextCapacity }
+          : b
+      ),
+      news: [
+        makeNewsEntry({
+          icon: "users",
+          title: `${business.name} let a staff member go`,
+          subtitle: `${result.nextCapacity}/hr capacity · daily wages reduced`,
+          tone: "neutral",
           day: state.day,
         }),
         ...state.news,
@@ -318,7 +355,11 @@ export const useGameStore = create((set, get) => ({
       return sum + (building?.dailyRent ?? 0);
     }, 0);
 
-    const accruedAfterToday = taxAccrued + taxOnProfit(businessIncome - rent);
+    const wages = totalDailyWages(businesses);
+
+    // Wages are a real operating cost, so they reduce taxable profit the
+    // same way rent does.
+    const accruedAfterToday = taxAccrued + taxOnProfit(businessIncome - rent - wages);
     const taxDue = isTaxPaymentDue(newDay, lastTaxPaymentDay);
     const otherExpenses = taxDue ? Math.round(accruedAfterToday) : 0;
     const nextTaxAccrued = taxDue ? 0 : accruedAfterToday;
@@ -327,7 +368,7 @@ export const useGameStore = create((set, get) => ({
       ? [{ day: newDay, amount: otherExpenses }, ...taxHistory].slice(0, 24)
       : taxHistory;
 
-    const netChange = businessIncome - rent - otherExpenses;
+    const netChange = businessIncome - rent - wages - otherExpenses;
     const newBalance = bankBalance + netChange;
 
     const entries = [];
@@ -360,6 +401,17 @@ export const useGameStore = create((set, get) => ({
           icon: "trending-down",
           title: "Rent charged",
           subtitle: `-${formatMoney(rent, { currency })} · ${rentedCount} leased building${rentedCount === 1 ? "" : "s"}`,
+          tone: "bad",
+          day: newDay,
+        })
+      );
+    }
+    if (wages > 0) {
+      entries.push(
+        makeNewsEntry({
+          icon: "users",
+          title: "Staff wages paid",
+          subtitle: `-${formatMoney(wages, { currency })} across your team`,
           tone: "bad",
           day: newDay,
         })
@@ -402,6 +454,7 @@ export const useGameStore = create((set, get) => ({
         day: newDay,
         revenue: businessIncome,
         rent,
+        wages,
         otherExpenses,
         netChange,
         newBalance,
