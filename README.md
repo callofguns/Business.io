@@ -81,7 +81,12 @@ npm run dev
   accrues automatically and is filed — deducted from your bank, shown as the Day Summary's
   "Other Expenses" line — every 30 days, or any time from the Tax Office screen's "Pay Now".
   See `src/lib/economy.js` for the rate/cadence formulas.
-- [ ] Stage 9 — Rivals / leaderboard
+- [x] Stage 9 — Rivals: a leaderboard ranking you against 6 fictional AI rival companies by
+  total net worth (bank balance + stock portfolio + owned real estate + a capitalized value
+  of your active businesses). Each rival has its own daily compound-growth rate and
+  volatility, so the field spreads out realistically over a playthrough. A news entry fires
+  whenever your rank changes. See `src/lib/economy.js` for the net-worth/growth formulas
+  and `src/data/rivals.js` for the rival list.
 
 ## Branch workflow
 

@@ -12,6 +12,7 @@ import {
   Megaphone,
   Receipt,
   Users,
+  Trophy,
 } from "lucide-react";
 
 const ICONS = {
@@ -26,6 +27,7 @@ const ICONS = {
   megaphone: Megaphone,
   receipt: Receipt,
   users: Users,
+  trophy: Trophy,
 };
 
 const TILE_TONES = {
