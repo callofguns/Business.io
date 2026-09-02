@@ -62,7 +62,13 @@ npm run dev
   "Wages" line in the Day Summary and factored into taxable profit) and grows the business's
   capacity toward its building's max, replacing the old flat-cash capacity-investment stub.
   See `src/lib/economy.js` for the wage/capacity formulas.
-- [ ] Stage 6 — Finance Manager: stock market
+- [x] Stage 6 — Finance Manager: buy/sell shares in 8 fictional stocks that random-walk in
+  price every day (mean-reverting toward each stock's starting price so it can't run away
+  to $0 or off to infinity), each with its own price-history chart. Half the list pays a
+  small daily cash dividend per share held — credited straight to your bank balance and
+  shown as a new "Dividends" line in the Day Summary — the other half only pays off through
+  price appreciation. See `src/data/stocks.js` for the stock list and `src/lib/economy.js`
+  for the price/dividend formulas.
 - [ ] Stage 7 — Real estate investments
 - [x] Stage 8 — Tax Office: a flat 15% tax on daily net business profit (revenue minus rent)
   accrues automatically and is filed — deducted from your bank, shown as the Day Summary's

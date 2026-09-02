@@ -3,6 +3,7 @@ import { useCurrencyStore } from "./currencyStore";
 import { formatMoney, weekdayIndex } from "../lib/format";
 import { STARTER_BUSINESS_OPTIONS, BUSINESS_TYPES } from "../data/businessTypes";
 import { buildingById } from "../data/buildings";
+import { STOCKS, stockById } from "../data/stocks";
 import {
   seedProductPrices,
   rollProductPrices,
@@ -21,6 +22,10 @@ import {
   taxOnProfit,
   isTaxPaymentDue,
   TAX_RATE,
+  seedStockPrices,
+  seedStockPriceHistory,
+  rollStockPrices,
+  totalDailyDividends,
 } from "../lib/economy";
 
 let newsIdSeq = 1;
@@ -71,10 +76,21 @@ const INITIAL_STATE = {
   lastTaxPaymentDay: 1,
   // Set by nextDay() and read by the day-summary modal.
   lastDaySummary: null,
+  // { [stockId]: currentPrice }, re-rolled every day inside nextDay() (see
+  // rollStockPrices in lib/economy.js) -- unlike product prices, stocks
+  // move daily, not just on Sundays.
+  stockPrices: seedStockPrices(),
+  // { [stockId]: { day, price }[] }, oldest first, capped to the last 30
+  // entries -- backs each stock's Finance Manager price chart.
+  stockPriceHistory: seedStockPriceHistory(),
+  // { [stockId]: { shares, avgCost } }, sparse -- a stock with no shares
+  // held has no entry. avgCost is the average price paid per share still
+  // held (unaffected by selling, since only the average matters for the
+  // P/L display -- no FIFO/LIFO lot tracking).
+  stockHoldings: {},
   // Placeholders for future stages — kept here now so later work only adds
   // reducers/screens, it doesn't need to reshape the store.
   employees: [],
-  stocks: [],
   properties: [],
   rivals: [],
   news: [
@@ -326,9 +342,95 @@ export const useGameStore = create((set, get) => ({
     });
   },
 
+  buyStock: ({ stockId, shares }) => {
+    const stock = stockById(stockId);
+    if (!stock) return;
+    const qty = Math.floor(shares);
+    if (!Number.isFinite(qty) || qty <= 0) return;
+
+    const state = get();
+    const price = state.stockPrices[stockId] ?? stock.startPrice;
+    const cost = price * qty;
+    if (state.bankBalance < cost) return;
+
+    const existing = state.stockHoldings[stockId];
+    const nextShares = (existing?.shares ?? 0) + qty;
+    const nextAvgCost = existing
+      ? Math.round(((existing.avgCost * existing.shares + cost) / nextShares) * 100) / 100
+      : price;
+
+    const currency = useCurrencyStore.getState().currency;
+    set({
+      bankBalance: state.bankBalance - cost,
+      stockHoldings: {
+        ...state.stockHoldings,
+        [stockId]: { shares: nextShares, avgCost: nextAvgCost },
+      },
+      news: [
+        makeNewsEntry({
+          icon: "trending-up",
+          title: `You bought ${qty} share${qty === 1 ? "" : "s"} of ${stock.ticker}`,
+          subtitle: `-${formatMoney(cost, { currency })} · ${formatMoney(price, { currency, decimals: true })}/share`,
+          tone: "good",
+          day: state.day,
+        }),
+        ...state.news,
+      ].slice(0, 30),
+    });
+  },
+
+  sellStock: ({ stockId, shares }) => {
+    const stock = stockById(stockId);
+    if (!stock) return;
+    const qty = Math.floor(shares);
+    if (!Number.isFinite(qty) || qty <= 0) return;
+
+    const state = get();
+    const existing = state.stockHoldings[stockId];
+    if (!existing || existing.shares < qty) return; // can't sell more than held
+
+    const price = state.stockPrices[stockId] ?? stock.startPrice;
+    const proceeds = price * qty;
+    const remainingShares = existing.shares - qty;
+    const nextHoldings = { ...state.stockHoldings };
+    if (remainingShares > 0) {
+      nextHoldings[stockId] = { shares: remainingShares, avgCost: existing.avgCost };
+    } else {
+      delete nextHoldings[stockId];
+    }
+
+    const currency = useCurrencyStore.getState().currency;
+    set({
+      bankBalance: state.bankBalance + proceeds,
+      stockHoldings: nextHoldings,
+      news: [
+        makeNewsEntry({
+          icon: "trending-down",
+          title: `You sold ${qty} share${qty === 1 ? "" : "s"} of ${stock.ticker}`,
+          subtitle: `+${formatMoney(proceeds, { currency })} · ${formatMoney(price, { currency, decimals: true })}/share`,
+          tone: "neutral",
+          day: state.day,
+        }),
+        ...state.news,
+      ].slice(0, 30),
+    });
+  },
+
   nextDay: () => {
-    const { day, bankBalance, businesses, acquiredBuildings, productPrices, news, taxAccrued, taxHistory, lastTaxPaymentDay } =
-      get();
+    const {
+      day,
+      bankBalance,
+      businesses,
+      acquiredBuildings,
+      productPrices,
+      news,
+      taxAccrued,
+      taxHistory,
+      lastTaxPaymentDay,
+      stockPrices,
+      stockPriceHistory,
+      stockHoldings,
+    } = get();
     const newDay = day + 1;
     const currency = useCurrencyStore.getState().currency;
     const isSunday = weekdayIndex(newDay) === 6;
@@ -357,8 +459,20 @@ export const useGameStore = create((set, get) => ({
 
     const wages = totalDailyWages(businesses);
 
+    // Stocks move every day (not gated on isSunday like product prices).
+    const nextStockPrices = rollStockPrices(stockPrices);
+    const nextStockPriceHistory = {};
+    for (const stock of STOCKS) {
+      nextStockPriceHistory[stock.id] = [
+        ...(stockPriceHistory[stock.id] ?? []),
+        { day: newDay, price: nextStockPrices[stock.id] },
+      ].slice(-30);
+    }
+    const dividends = Math.round(totalDailyDividends(stockHoldings, nextStockPrices) * 100) / 100;
+
     // Wages are a real operating cost, so they reduce taxable profit the
-    // same way rent does.
+    // same way rent does. Dividends are a separate asset class (not
+    // business profit), so they don't feed into the tax basis.
     const accruedAfterToday = taxAccrued + taxOnProfit(businessIncome - rent - wages);
     const taxDue = isTaxPaymentDue(newDay, lastTaxPaymentDay);
     const otherExpenses = taxDue ? Math.round(accruedAfterToday) : 0;
@@ -368,7 +482,7 @@ export const useGameStore = create((set, get) => ({
       ? [{ day: newDay, amount: otherExpenses }, ...taxHistory].slice(0, 24)
       : taxHistory;
 
-    const netChange = businessIncome - rent - wages - otherExpenses;
+    const netChange = businessIncome - rent - wages - otherExpenses + dividends;
     const newBalance = bankBalance + netChange;
 
     const entries = [];
@@ -417,6 +531,17 @@ export const useGameStore = create((set, get) => ({
         })
       );
     }
+    if (dividends > 0) {
+      entries.push(
+        makeNewsEntry({
+          icon: "banknote",
+          title: "Dividends received",
+          subtitle: `+${formatMoney(dividends, { currency })} from your stock holdings`,
+          tone: "good",
+          day: newDay,
+        })
+      );
+    }
     if (taxDue && otherExpenses > 0) {
       entries.push(
         makeNewsEntry({
@@ -449,10 +574,13 @@ export const useGameStore = create((set, get) => ({
       taxAccrued: nextTaxAccrued,
       taxHistory: nextTaxHistory,
       lastTaxPaymentDay: nextLastTaxPaymentDay,
+      stockPrices: nextStockPrices,
+      stockPriceHistory: nextStockPriceHistory,
       news: [...entries, ...news].slice(0, 30),
       lastDaySummary: {
         day: newDay,
         revenue: businessIncome,
+        dividends,
         rent,
         wages,
         otherExpenses,

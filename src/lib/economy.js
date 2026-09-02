@@ -1,4 +1,5 @@
 import { BUSINESS_TYPES } from "../data/businessTypes";
+import { STOCKS } from "../data/stocks";
 
 // --- Revenue model -----------------------------------------------------
 //
@@ -313,4 +314,74 @@ export function staffFireResult(business, building) {
     nextStaffCount: staffCount - 1,
     nextCapacity: capacityForStaff(building, staffCount - 1),
   };
+}
+
+// --- Stock market (Finance Manager) ------------------------------------
+//
+// A small fixed list of fictional stocks (data/stocks.js). Unlike product
+// prices (which only move on Sundays), every stock's price random-walks
+// every single day inside gameStore.nextDay() -- current prices live in
+// gameStore's `stockPrices` ({ [stockId]: price }), with a rolling
+// `stockPriceHistory` ({ [stockId]: { day, price }[] }, capped to the last
+// 30 entries) backing each stock's Finance Manager chart. Holdings
+// (`stockHoldings`, { [stockId]: { shares, avgCost } }) are bought/sold at
+// the live price via gameStore.buyStock/sellStock.
+//
+// Each day's move is a noise term (+/- the stock's own volatility, as a
+// fraction of its current price) plus a small pull back toward the stock's
+// startPrice (STOCK_MEAN_REVERSION) so a run of bad or good luck drifts
+// back over time instead of compounding into a runaway price -- and a hard
+// floor (STOCK_MIN_PRICE_FLOOR, as a fraction of startPrice) so a stock can
+// never spiral all the way to $0.
+export const STOCK_MEAN_REVERSION = 0.02; // pulls 2% of the gap back toward startPrice each day
+export const STOCK_MIN_PRICE_FLOOR = 0.05; // price can never fall below 5% of its startPrice
+
+export function rollStockPrice(stock, currentPrice) {
+  const reversion = (stock.startPrice - currentPrice) * STOCK_MEAN_REVERSION;
+  const noise = currentPrice * stock.volatility * (Math.random() * 2 - 1);
+  const next = currentPrice + reversion + noise;
+  return Math.max(stock.startPrice * STOCK_MIN_PRICE_FLOOR, Math.round(next * 100) / 100);
+}
+
+export function rollStockPrices(prevPrices) {
+  const prices = {};
+  for (const stock of STOCKS) {
+    const current = prevPrices?.[stock.id] ?? stock.startPrice;
+    prices[stock.id] = rollStockPrice(stock, current);
+  }
+  return prices;
+}
+
+export function seedStockPrices() {
+  const prices = {};
+  for (const stock of STOCKS) prices[stock.id] = stock.startPrice;
+  return prices;
+}
+
+export function seedStockPriceHistory() {
+  const history = {};
+  for (const stock of STOCKS) history[stock.id] = [{ day: 1, price: stock.startPrice }];
+  return history;
+}
+
+// A stock with dividendRate 0 pays nothing -- half the list (the
+// growth/speculative names) only ever pays off through price appreciation.
+export function dividendPayout(stock, price, shares) {
+  if (!stock.dividendRate || !shares) return 0;
+  return price * stock.dividendRate * shares;
+}
+
+// Total dividend cash paid out today across every held, dividend-paying
+// stock -- folded into gameStore.nextDay()'s netChange alongside revenue,
+// rent, and wages. Dividends are not treated as taxable business profit
+// (TAX_RATE only ever applies to business revenue minus rent/wages, see
+// taxOnProfit) -- they're a separate asset class, not the tycoon's
+// business income.
+export function totalDailyDividends(holdings, prices) {
+  return STOCKS.reduce((sum, stock) => {
+    const shares = holdings?.[stock.id]?.shares ?? 0;
+    if (!shares) return sum;
+    const price = prices?.[stock.id] ?? stock.startPrice;
+    return sum + dividendPayout(stock, price, shares);
+  }, 0);
 }

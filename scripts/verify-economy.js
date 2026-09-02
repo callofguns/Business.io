@@ -20,6 +20,7 @@ globalThis.localStorage = {
 const { useGameStore, vacantBuildingsFor } = await import("../src/state/gameStore.js");
 const { BUILDINGS, buildingById, dailyRentFor } = await import("../src/data/buildings.js");
 const { BUSINESS_TYPES, STARTER_BUSINESS_OPTIONS } = await import("../src/data/businessTypes.js");
+const { STOCKS, stockById } = await import("../src/data/stocks.js");
 const {
   expectedDailyRevenue,
   expectedDailyVisitors,
@@ -37,6 +38,10 @@ const {
   isTaxPaymentDue,
   TAX_RATE,
   TAX_PERIOD_DAYS,
+  rollStockPrice,
+  dividendPayout,
+  totalDailyDividends,
+  STOCK_MIN_PRICE_FLOOR,
 } = await import("../src/lib/economy.js");
 const { weekdayIndex } = await import("../src/lib/format.js");
 
@@ -104,6 +109,21 @@ section("Initial store state (tax fields)");
   check("taxAccrued starts at 0", s.taxAccrued === 0);
   check("taxHistory starts empty", s.taxHistory.length === 0);
   check("lastTaxPaymentDay starts on day 1", s.lastTaxPaymentDay === 1);
+}
+
+// ---------------------------------------------------------------------
+section("Initial store state (stock fields) -- checked before any nextDay() call");
+{
+  const s = useGameStore.getState();
+  check("stockPrices seeded to each stock's startPrice", STOCKS.every((stock) => s.stockPrices[stock.id] === stock.startPrice));
+  check(
+    "stockPriceHistory seeded with a single day-1 entry per stock",
+    STOCKS.every((stock) => {
+      const h = s.stockPriceHistory[stock.id];
+      return Array.isArray(h) && h.length === 1 && h[0].day === 1 && h[0].price === stock.startPrice;
+    })
+  );
+  check("stockHoldings starts empty", Object.keys(s.stockHoldings).length === 0);
 }
 
 // ---------------------------------------------------------------------
@@ -692,6 +712,161 @@ section("setProductPrice / demandMultiplier");
 }
 
 // ---------------------------------------------------------------------
+section("Stock market (data + formulas)");
+{
+  check("8 stocks total", STOCKS.length === 8);
+  check("unique ids", new Set(STOCKS.map((s) => s.id)).size === 8);
+  check("unique tickers", new Set(STOCKS.map((s) => s.ticker)).size === 8);
+  check("every stock has a positive startPrice", STOCKS.every((s) => s.startPrice > 0));
+  check("every stock has a positive volatility", STOCKS.every((s) => s.volatility > 0));
+  check("4 stocks pay a dividend, 4 don't", STOCKS.filter((s) => s.dividendRate > 0).length === 4);
+
+  const s0 = useGameStore.getState();
+
+  // rollStockPrice never drops below the floor even given a run of extreme
+  // downward rolls
+  const volatileStock = STOCKS.find((s) => s.id === "brmb");
+  let minSeen = Infinity;
+  for (let i = 0; i < 500; i++) {
+    minSeen = Math.min(minSeen, rollStockPrice(volatileStock, volatileStock.startPrice * 0.1));
+  }
+  check(
+    "rollStockPrice respects STOCK_MIN_PRICE_FLOOR",
+    minSeen >= volatileStock.startPrice * STOCK_MIN_PRICE_FLOOR - 0.01
+  );
+
+  // dividendPayout: 0 for non-payers, proportional for payers
+  const growthStock = STOCKS.find((s) => s.dividendRate === 0);
+  const payerStock = STOCKS.find((s) => s.dividendRate > 0);
+  check(
+    "non-dividend stock pays 0 regardless of shares held",
+    dividendPayout(growthStock, growthStock.startPrice, 100) === 0
+  );
+  check(
+    "dividend stock pays price * dividendRate * shares",
+    Math.abs(dividendPayout(payerStock, 100, 10) - 100 * payerStock.dividendRate * 10) < 1e-9
+  );
+  check("dividendPayout is 0 with no shares held", dividendPayout(payerStock, 100, 0) === 0);
+  check(
+    "totalDailyDividends sums only dividend-paying holdings",
+    totalDailyDividends({ [growthStock.id]: { shares: 50 }, [payerStock.id]: { shares: 20 } }, s0.stockPrices) ===
+      dividendPayout(payerStock, s0.stockPrices[payerStock.id], 20)
+  );
+}
+
+// ---------------------------------------------------------------------
+section("buyStock / sellStock");
+{
+  useGameStore.setState({ bankBalance: 50000 });
+  const s0 = useGameStore.getState();
+  const stock = stockById("evrl");
+  const price = s0.stockPrices[stock.id];
+
+  // guards
+  s0.buyStock({ stockId: "does-not-exist", shares: 5 });
+  check("buying an unknown stock is a no-op", useGameStore.getState().bankBalance === 50000);
+  s0.buyStock({ stockId: stock.id, shares: 0 });
+  check("buying 0 shares is a no-op", useGameStore.getState().bankBalance === 50000);
+  s0.sellStock({ stockId: stock.id, shares: 1 });
+  check("selling with nothing held is a no-op", useGameStore.getState().bankBalance === 50000);
+
+  // buy 10 shares
+  s0.buyStock({ stockId: stock.id, shares: 10 });
+  const after1 = useGameStore.getState();
+  check("cost deducted", Math.abs(after1.bankBalance - (50000 - price * 10)) < 1e-9);
+  check("holdings shares = 10", after1.stockHoldings[stock.id].shares === 10);
+  check("holdings avgCost = purchase price", after1.stockHoldings[stock.id].avgCost === price);
+
+  // buy 10 more at a different price -- avgCost should be the weighted
+  // average of both purchases
+  useGameStore.setState({ stockPrices: { ...after1.stockPrices, [stock.id]: price * 1.2 } });
+  const price2 = useGameStore.getState().stockPrices[stock.id];
+  useGameStore.getState().buyStock({ stockId: stock.id, shares: 10 });
+  const after2 = useGameStore.getState();
+  const expectedAvg = Math.round(((price * 10 + price2 * 10) / 20) * 100) / 100;
+  check("holdings shares = 20 after second buy", after2.stockHoldings[stock.id].shares === 20);
+  check("avgCost is the weighted average of both buys", after2.stockHoldings[stock.id].avgCost === expectedAvg);
+
+  // can't buy more than the bank can afford
+  useGameStore.setState({ bankBalance: 1 });
+  useGameStore.getState().buyStock({ stockId: stock.id, shares: 1000 });
+  check("unaffordable buy is a no-op", useGameStore.getState().stockHoldings[stock.id].shares === 20);
+
+  // sell more than held is a no-op
+  useGameStore.setState({ bankBalance: 50000 });
+  useGameStore.getState().sellStock({ stockId: stock.id, shares: 21 });
+  check("selling more shares than held is a no-op", useGameStore.getState().stockHoldings[stock.id].shares === 20);
+
+  // partial sell -- avgCost unchanged
+  const beforeSell = useGameStore.getState();
+  const sellPrice = beforeSell.stockPrices[stock.id];
+  beforeSell.sellStock({ stockId: stock.id, shares: 5 });
+  const afterSell = useGameStore.getState();
+  check("partial sell reduces shares", afterSell.stockHoldings[stock.id].shares === 15);
+  check(
+    "partial sell proceeds credited",
+    Math.abs(afterSell.bankBalance - (beforeSell.bankBalance + sellPrice * 5)) < 1e-9
+  );
+  check("partial sell leaves avgCost unchanged", afterSell.stockHoldings[stock.id].avgCost === expectedAvg);
+
+  // sell everything -- holdings entry removed entirely
+  useGameStore.getState().sellStock({ stockId: stock.id, shares: 15 });
+  const afterAll = useGameStore.getState();
+  check("selling all shares removes the holdings entry", !(stock.id in afterAll.stockHoldings));
+}
+
+// ---------------------------------------------------------------------
+section("Stock prices roll daily + dividends paid via nextDay");
+{
+  // buy into a dividend payer so today's dividend is nonzero
+  const payer = STOCKS.find((s) => s.dividendRate > 0);
+  useGameStore.setState({ bankBalance: 100000 });
+  useGameStore.getState().buyStock({ stockId: payer.id, shares: 50 });
+
+  const before = useGameStore.getState();
+  const dayBefore = before.day;
+  before.nextDay();
+  const after = useGameStore.getState();
+
+  check(
+    "every non-zero-volatility stock's price changed after nextDay (daily roll, not weekly)",
+    STOCKS.every((s) => after.stockPrices[s.id] !== before.stockPrices[s.id])
+  );
+  check(
+    "stockPriceHistory grew by one entry per stock (or held at the 30-entry cap)",
+    STOCKS.every((s) => after.stockPriceHistory[s.id].length === Math.min(30, before.stockPriceHistory[s.id].length + 1))
+  );
+  check(
+    "newest history entry matches the new day/price for every stock",
+    STOCKS.every((s) => {
+      const h = after.stockPriceHistory[s.id];
+      const last = h[h.length - 1];
+      return last.day === dayBefore + 1 && last.price === after.stockPrices[s.id];
+    })
+  );
+  check("lastDaySummary.dividends > 0 with a dividend payer held", after.lastDaySummary.dividends > 0);
+  check(
+    "dividends credited to bankBalance via netChange",
+    Math.abs(
+      after.lastDaySummary.netChange -
+        (after.lastDaySummary.revenue -
+          after.lastDaySummary.rent -
+          after.lastDaySummary.wages -
+          after.lastDaySummary.otherExpenses +
+          after.lastDaySummary.dividends)
+    ) < 1e-9
+  );
+  check(
+    "a 'Dividends received' news entry was recorded",
+    after.news.some((n) => n.icon === "banknote" && n.title === "Dividends received")
+  );
+
+  // sell back out so later sections' magnitude/soak numbers aren't skewed
+  useGameStore.getState().sellStock({ stockId: payer.id, shares: 50 });
+  check("sold the dividend holding back off", !(payer.id in useGameStore.getState().stockHoldings));
+}
+
+// ---------------------------------------------------------------------
 section("30-day soak (no NaN/Infinity, news capped)");
 {
   // hire someone so wages are actually exercised through the soak, not left
@@ -742,8 +917,26 @@ section("30-day soak (no NaN/Infinity, news capped)");
       return building && count >= 0 && count <= maxStaffFor(building);
     })
   );
+  check(
+    "all stock prices finite, positive, and at least the floor after the soak",
+    STOCKS.every((stock) => {
+      const p = s.stockPrices[stock.id];
+      return isFinite_(p) && p >= stock.startPrice * STOCK_MIN_PRICE_FLOOR - 0.01;
+    })
+  );
+  check(
+    "stockPriceHistory capped at 30 entries per stock",
+    STOCKS.every((stock) => (s.stockPriceHistory[stock.id] ?? []).length <= 30)
+  );
+  check(
+    "lastDaySummary.dividends finite and non-negative",
+    isFinite_(s.lastDaySummary.dividends) && s.lastDaySummary.dividends >= 0
+  );
   console.log(`  tax: accrued=${s.taxAccrued.toFixed(2)} history=${s.taxHistory.length} entries`);
   console.log(`  final day=${s.day} bankBalance=${s.bankBalance.toFixed(2)}`);
+  console.log(
+    `  stocks: ${STOCKS.map((stock) => `${stock.ticker}=${s.stockPrices[stock.id].toFixed(2)}`).join(" ")}`
+  );
 }
 
 // ---------------------------------------------------------------------
