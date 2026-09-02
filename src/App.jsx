@@ -6,6 +6,7 @@ import { Marketplace } from "./screens/Marketplace";
 import { BusinessDetail } from "./screens/BusinessDetail";
 import { TaxOffice } from "./screens/TaxOffice";
 import { Hiring } from "./screens/Hiring";
+import { Finance } from "./screens/Finance";
 import { Login } from "./screens/Login";
 import { useUiStore } from "./state/uiStore";
 import { useThemeStore, applyTheme } from "./state/themeStore";
@@ -18,6 +19,7 @@ const SCREENS = {
   businessDetail: BusinessDetail,
   tax: TaxOffice,
   hiring: Hiring,
+  finance: Finance,
 };
 
 export default function App() {
