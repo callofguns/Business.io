@@ -4,9 +4,20 @@
 // mirror the actual GitHub release notes at
 // https://github.com/callofguns/Business.io/releases -- only released
 // versions belong here, nothing still sitting on `dev` unreleased.
-export const APP_VERSION = "v0.2.5-beta";
+export const APP_VERSION = "v0.2.6-beta";
 
 export const CHANGELOG = [
+  {
+    version: "v0.2.6-beta",
+    date: "2026-09-02",
+    title: "Stage 7: Real Estate + Update Log",
+    notes: [
+      "Stage 7: Real Estate — every Marketplace building's buy-outright price is now a live market value that drifts up daily (with a rare chance of a real crash), instead of a frozen number",
+      "An owned building not occupied by your own business earns passive rental income, shown as a new \"Rental Income\" line in the Day Summary",
+      "New Real Estate screen: your owned buildings as a portfolio — purchase price vs. live value, occupancy, and a Sell button",
+      "Settings now shows the app version and an Update Log with every past release (this very entry included)",
+    ],
+  },
   {
     version: "v0.2.5-beta",
     date: "2026-09-02",
