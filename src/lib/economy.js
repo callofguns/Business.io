@@ -1,5 +1,6 @@
 import { BUSINESS_TYPES } from "../data/businessTypes";
 import { STOCKS } from "../data/stocks";
+import { BUILDINGS, buildingById } from "../data/buildings";
 
 // --- Revenue model -----------------------------------------------------
 //
@@ -383,5 +384,83 @@ export function totalDailyDividends(holdings, prices) {
     if (!shares) return sum;
     const price = prices?.[stock.id] ?? stock.startPrice;
     return sum + dividendPayout(stock, price, shares);
+  }, 0);
+}
+
+// --- Real estate (Stage 7) ----------------------------------------------
+//
+// Extends the existing Marketplace building catalog into an investable
+// asset: every building's *ownership* price is a live market value
+// (gameStore's `buildingMarketValues`, { [buildingId]: price }) instead of
+// the static `building.buyPrice` -- seeded from buyPrice, then random-
+// walked once per day in nextDay() (see rollMarketValues), same cadence as
+// stocks. `building.dailyRent`/`rentDeposit` (what a *renter* pays) are
+// untouched -- only the buy-outright price moves.
+//
+// Unlike stocks (continuous +/- noise), real estate is meant to feel like
+// the "safer, boring" asset: it drifts up steadily almost every day, but
+// carries a small daily chance of a real crash. A floor (as a fraction of
+// the building's original price) still applies so a crash streak can't
+// wipe a property out entirely.
+export const MARKET_VALUE_DAILY_GROWTH = 0.0008; // +0.08%/day on a normal (non-crash) day
+export const MARKET_VALUE_CRASH_CHANCE = 0.01; // 1% chance per day of a crash instead of growth
+export const MARKET_VALUE_CRASH_MIN = 0.1; // a crash wipes 10-25% of that day's value
+export const MARKET_VALUE_CRASH_MAX = 0.25;
+export const MARKET_VALUE_FLOOR_RATIO = 0.5; // can never fall below 50% of the original buyPrice
+
+export function seedMarketValues() {
+  const values = {};
+  for (const building of BUILDINGS) values[building.id] = building.buyPrice;
+  return values;
+}
+
+// One day's roll for a single building. Returns { value, crashed } so
+// callers (nextDay) can surface crash days as their own news entry rather
+// than just a lower number.
+export function rollMarketValue(building, currentValue) {
+  const crashed = Math.random() < MARKET_VALUE_CRASH_CHANCE;
+  const next = crashed
+    ? currentValue * (1 - (MARKET_VALUE_CRASH_MIN + Math.random() * (MARKET_VALUE_CRASH_MAX - MARKET_VALUE_CRASH_MIN)))
+    : currentValue * (1 + MARKET_VALUE_DAILY_GROWTH);
+  const floor = building.buyPrice * MARKET_VALUE_FLOOR_RATIO;
+  return { value: Math.max(floor, Math.round(next)), crashed };
+}
+
+// Rolls every building in the catalog for one day. Returns { values,
+// crashedIds } -- crashedIds backs a single aggregated "property values
+// dropped" news entry rather than one per crashed building.
+export function rollMarketValues(prevValues) {
+  const values = {};
+  const crashedIds = [];
+  for (const building of BUILDINGS) {
+    const current = prevValues?.[building.id] ?? building.buyPrice;
+    const { value, crashed } = rollMarketValue(building, current);
+    values[building.id] = value;
+    if (crashed) crashedIds.push(building.id);
+  }
+  return { values, crashedIds };
+}
+
+// --- Passive rental income -----------------------------------------------
+//
+// An *owned* building the player isn't currently running their own
+// business in earns passive income from a third-party tenant -- a fraction
+// of the building's own dailyRent stat (the same figure a business would
+// pay to lease it). A *rented* (not owned) building never earns this: the
+// player is the tenant there, not the landlord.
+export const RENTAL_INCOME_RATE = 0.7;
+
+export function passiveRentalIncome(building) {
+  return Math.round(building.dailyRent * RENTAL_INCOME_RATE);
+}
+
+export function totalPassiveRentalIncome(acquiredBuildings, businesses) {
+  return acquiredBuildings.reduce((sum, a) => {
+    if (a.mode !== "own") return sum;
+    const building = buildingById(a.buildingId);
+    if (!building) return sum;
+    const occupied = businesses.some((b) => b.buildingId === a.buildingId && b.active !== false);
+    if (occupied) return sum;
+    return sum + passiveRentalIncome(building);
   }, 0);
 }

@@ -26,6 +26,9 @@ import {
   seedStockPriceHistory,
   rollStockPrices,
   totalDailyDividends,
+  seedMarketValues,
+  rollMarketValues,
+  totalPassiveRentalIncome,
 } from "../lib/economy";
 
 let newsIdSeq = 1;
@@ -88,10 +91,15 @@ const INITIAL_STATE = {
   // held (unaffected by selling, since only the average matters for the
   // P/L display -- no FIFO/LIFO lot tracking).
   stockHoldings: {},
+  // { [buildingId]: currentValue }, re-rolled every day inside nextDay()
+  // (see rollMarketValues in lib/economy.js). Seeded from each building's
+  // static buyPrice and drifts from there -- this is now the live cost to
+  // acquire a building "own" (see acquireBuilding) and the live proceeds
+  // from selling one back (see sellBuilding), not the frozen buyPrice.
+  buildingMarketValues: seedMarketValues(),
   // Placeholders for future stages — kept here now so later work only adds
   // reducers/screens, it doesn't need to reshape the store.
   employees: [],
-  properties: [],
   rivals: [],
   news: [
     makeNewsEntry({
@@ -112,10 +120,13 @@ export const useGameStore = create((set, get) => ({
     const building = buildingById(buildingId);
     if (!building) return;
 
-    const { bankBalance, acquiredBuildings, day, news } = get();
+    const { bankBalance, acquiredBuildings, day, news, buildingMarketValues } = get();
     if (acquiredBuildings.some((a) => a.buildingId === buildingId)) return;
 
-    const cost = mode === "own" ? building.buyPrice : building.rentDeposit;
+    // Buying outright costs the building's *live* market value (see
+    // buildingMarketValues/rollMarketValues), not the frozen buyPrice --
+    // renting is unaffected, its deposit/dailyRent are static lease terms.
+    const cost = mode === "own" ? buildingMarketValues[buildingId] ?? building.buyPrice : building.rentDeposit;
     if (bankBalance < cost) return;
 
     const currency = useCurrencyStore.getState().currency;
@@ -416,6 +427,39 @@ export const useGameStore = create((set, get) => ({
     });
   },
 
+  // Sells an *owned* building back at its current live market value. Only
+  // "own" acquisitions are sellable (a rented lease isn't an investment to
+  // liquidate); blocked while one of the player's own businesses is
+  // running in it -- selling the building out from under your own
+  // business isn't modeled, vacate it first.
+  sellBuilding: ({ buildingId }) => {
+    const state = get();
+    const acquisition = state.acquiredBuildings.find((a) => a.buildingId === buildingId);
+    if (!acquisition || acquisition.mode !== "own") return;
+    const building = buildingById(buildingId);
+    if (!building) return;
+    if (!isVacant(state, buildingId)) return;
+
+    const price = state.buildingMarketValues[buildingId] ?? building.buyPrice;
+    const currency = useCurrencyStore.getState().currency;
+    set({
+      bankBalance: state.bankBalance + price,
+      acquiredBuildings: state.acquiredBuildings.filter((a) => a.buildingId !== buildingId),
+      news: [
+        makeNewsEntry({
+          icon: "landmark",
+          title: `You sold ${building.name}`,
+          subtitle: `+${formatMoney(price, { currency })} · ${
+            price >= building.buyPrice ? "a profit" : "a loss"
+          } vs. purchase price`,
+          tone: price >= building.buyPrice ? "good" : "bad",
+          day: state.day,
+        }),
+        ...state.news,
+      ].slice(0, 30),
+    });
+  },
+
   nextDay: () => {
     const {
       day,
@@ -430,6 +474,7 @@ export const useGameStore = create((set, get) => ({
       stockPrices,
       stockPriceHistory,
       stockHoldings,
+      buildingMarketValues,
     } = get();
     const newDay = day + 1;
     const currency = useCurrencyStore.getState().currency;
@@ -470,9 +515,15 @@ export const useGameStore = create((set, get) => ({
     }
     const dividends = Math.round(totalDailyDividends(stockHoldings, nextStockPrices) * 100) / 100;
 
+    // Real estate: buildings' market values also roll daily, and any owned
+    // building not occupied by the player's own business earns passive
+    // rental income.
+    const { values: nextMarketValues, crashedIds } = rollMarketValues(buildingMarketValues);
+    const rentalIncome = totalPassiveRentalIncome(acquiredBuildings, businesses);
+
     // Wages are a real operating cost, so they reduce taxable profit the
-    // same way rent does. Dividends are a separate asset class (not
-    // business profit), so they don't feed into the tax basis.
+    // same way rent does. Dividends and rental income are a separate asset
+    // class (not business profit), so they don't feed into the tax basis.
     const accruedAfterToday = taxAccrued + taxOnProfit(businessIncome - rent - wages);
     const taxDue = isTaxPaymentDue(newDay, lastTaxPaymentDay);
     const otherExpenses = taxDue ? Math.round(accruedAfterToday) : 0;
@@ -482,7 +533,7 @@ export const useGameStore = create((set, get) => ({
       ? [{ day: newDay, amount: otherExpenses }, ...taxHistory].slice(0, 24)
       : taxHistory;
 
-    const netChange = businessIncome - rent - wages - otherExpenses + dividends;
+    const netChange = businessIncome - rent - wages - otherExpenses + dividends + rentalIncome;
     const newBalance = bankBalance + netChange;
 
     const entries = [];
@@ -542,6 +593,28 @@ export const useGameStore = create((set, get) => ({
         })
       );
     }
+    if (rentalIncome > 0) {
+      entries.push(
+        makeNewsEntry({
+          icon: "landmark",
+          title: "Rental income collected",
+          subtitle: `+${formatMoney(rentalIncome, { currency })} from vacant owned properties`,
+          tone: "good",
+          day: newDay,
+        })
+      );
+    }
+    if (crashedIds.length > 0) {
+      entries.push(
+        makeNewsEntry({
+          icon: "trending-down",
+          title: "Property values dropped",
+          subtitle: `${crashedIds.length} building${crashedIds.length === 1 ? "" : "s"} in the market took a hit today`,
+          tone: "bad",
+          day: newDay,
+        })
+      );
+    }
     if (taxDue && otherExpenses > 0) {
       entries.push(
         makeNewsEntry({
@@ -576,11 +649,13 @@ export const useGameStore = create((set, get) => ({
       lastTaxPaymentDay: nextLastTaxPaymentDay,
       stockPrices: nextStockPrices,
       stockPriceHistory: nextStockPriceHistory,
+      buildingMarketValues: nextMarketValues,
       news: [...entries, ...news].slice(0, 30),
       lastDaySummary: {
         day: newDay,
         revenue: businessIncome,
         dividends,
+        rentalIncome,
         rent,
         wages,
         otherExpenses,

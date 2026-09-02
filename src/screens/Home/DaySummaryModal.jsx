@@ -38,6 +38,7 @@ export function DaySummaryModal({ open, onClose }) {
         <div className="flex flex-col gap-2">
           <SummaryRow label="Total Revenue" amount={summary.revenue} currency={currency} />
           <SummaryRow label="Dividends" amount={summary.dividends} currency={currency} />
+          <SummaryRow label="Rental Income" amount={summary.rentalIncome} currency={currency} />
           <SummaryRow label="Rent" amount={summary.rent} currency={currency} isExpense />
           <SummaryRow label="Wages" amount={summary.wages} currency={currency} isExpense />
           <SummaryRow label="Other Expenses" amount={summary.otherExpenses} currency={currency} isExpense />

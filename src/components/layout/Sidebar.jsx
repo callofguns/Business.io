@@ -25,7 +25,7 @@ const NAV_ITEMS = [
   { key: "marketplace", label: "Marketplace", icon: ShoppingBag, enabled: true },
   { key: "hiring", label: "Hiring", icon: Users, enabled: true },
   { key: "finance", label: "Finance Manager", icon: LineChart, enabled: true },
-  { key: "realestate", label: "Real Estate", icon: Landmark, enabled: false },
+  { key: "realestate", label: "Real Estate", icon: Landmark, enabled: true },
   { key: "tax", label: "Tax Office", icon: Receipt, enabled: true },
   { key: "rivals", label: "Rivals", icon: Trophy, enabled: false },
 ];
