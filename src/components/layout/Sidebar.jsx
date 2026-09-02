@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { SettingsModal } from "./SettingsModal";
+import { ChangelogModal } from "./ChangelogModal";
 import { useAuthStore } from "../../state/authStore";
 
 // Only "home" is wired up in this stage. The rest are listed so the shell's
@@ -35,6 +36,7 @@ export function Sidebar({ current, onNavigate }) {
   const logout = useAuthStore((s) => s.logout);
   const initial = playerName ? playerName.trim().charAt(0).toUpperCase() : "?";
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [changelogOpen, setChangelogOpen] = useState(false);
 
   return (
     <aside className="flex h-full w-64 shrink-0 flex-col border-r border-border bg-surface px-4 py-6">
@@ -106,7 +108,15 @@ export function Sidebar({ current, onNavigate }) {
         </div>
       </div>
 
-      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onOpenChangelog={() => {
+          setSettingsOpen(false);
+          setChangelogOpen(true);
+        }}
+      />
+      <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />
     </aside>
   );
 }

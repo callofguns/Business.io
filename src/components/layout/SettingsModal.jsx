@@ -1,10 +1,13 @@
 import clsx from "clsx";
+import { History } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { ThemeToggle } from "../ui/ThemeToggle";
+import { PillButton } from "../ui/Button";
 import { useCurrencyStore } from "../../state/currencyStore";
 import { CURRENCY_LIST } from "../../data/currencies";
+import { APP_VERSION } from "../../data/changelog";
 
-export function SettingsModal({ open, onClose }) {
+export function SettingsModal({ open, onClose, onOpenChangelog }) {
   const currency = useCurrencyStore((s) => s.currency);
   const setCurrency = useCurrencyStore((s) => s.setCurrency);
 
@@ -56,6 +59,21 @@ export function SettingsModal({ open, onClose }) {
                 </button>
               );
             })}
+          </div>
+        </section>
+
+        <section>
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-ink-faint">
+            About
+          </p>
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-border-strong bg-surface px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-[13px] font-bold text-ink">business.io {APP_VERSION}</p>
+              <p className="text-[11.5px] text-ink-faint">See what's changed in each release</p>
+            </div>
+            <PillButton size="sm" variant="outline" icon={History} onClick={onOpenChangelog}>
+              Update Log
+            </PillButton>
           </div>
         </section>
       </div>
