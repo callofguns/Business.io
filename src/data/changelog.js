@@ -4,9 +4,20 @@
 // mirror the actual GitHub release notes at
 // https://github.com/callofguns/Business.io/releases -- only released
 // versions belong here, nothing still sitting on `dev` unreleased.
-export const APP_VERSION = "v0.2.6-beta";
+export const APP_VERSION = "v0.2.7-beta";
 
 export const CHANGELOG = [
+  {
+    version: "v0.2.7-beta",
+    date: "2026-09-02",
+    title: "Stage 9: Rivals",
+    notes: [
+      "New Rivals screen — a leaderboard ranking you against 6 fictional AI companies by total net worth (bank balance + stocks + owned real estate + a capitalized value of your businesses)",
+      "Each rival grows at its own daily rate, some steady and some volatile, so the standings genuinely shift over a playthrough",
+      "A news entry fires whenever your rank changes — overtaking a rival, or getting overtaken",
+      "This completes the full roadmap — all 9 stages are now live",
+    ],
+  },
   {
     version: "v0.2.6-beta",
     date: "2026-09-02",
