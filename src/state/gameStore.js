@@ -29,6 +29,10 @@ import {
   seedMarketValues,
   rollMarketValues,
   totalPassiveRentalIncome,
+  seedRivalNetWorths,
+  rollRivalNetWorths,
+  computeNetWorth,
+  computePlayerRank,
 } from "../lib/economy";
 
 let newsIdSeq = 1;
@@ -97,10 +101,14 @@ const INITIAL_STATE = {
   // acquire a building "own" (see acquireBuilding) and the live proceeds
   // from selling one back (see sellBuilding), not the frozen buyPrice.
   buildingMarketValues: seedMarketValues(),
+  // { [rivalId]: currentNetWorth }, re-rolled every day inside nextDay()
+  // (see rollRivalNetWorths in lib/economy.js). The player's own net worth
+  // is never stored -- it's always computed fresh via computeNetWorth from
+  // the state slices that already exist for each asset class.
+  rivalNetWorths: seedRivalNetWorths(),
   // Placeholders for future stages — kept here now so later work only adds
   // reducers/screens, it doesn't need to reshape the store.
   employees: [],
-  rivals: [],
   news: [
     makeNewsEntry({
       icon: "briefcase",
@@ -475,11 +483,21 @@ export const useGameStore = create((set, get) => ({
       stockPriceHistory,
       stockHoldings,
       buildingMarketValues,
+      rivalNetWorths,
     } = get();
     const newDay = day + 1;
     const currency = useCurrencyStore.getState().currency;
     const isSunday = weekdayIndex(newDay) === 6;
     const prices = isSunday ? rollProductPrices() : productPrices;
+
+    // Rank-change news compares the player's leaderboard position before
+    // today's changes against after -- captured now, before any mutation,
+    // then again right before the final set() once every asset class has
+    // its new-day value.
+    const rankBefore = computePlayerRank(
+      computeNetWorth({ bankBalance, businesses, productPrices, day, stockHoldings, stockPrices, acquiredBuildings, buildingMarketValues }),
+      rivalNetWorths
+    );
 
     let businessIncome = 0;
     let activeCount = 0;
@@ -535,6 +553,21 @@ export const useGameStore = create((set, get) => ({
 
     const netChange = businessIncome - rent - wages - otherExpenses + dividends + rentalIncome;
     const newBalance = bankBalance + netChange;
+
+    const nextRivalNetWorths = rollRivalNetWorths(rivalNetWorths);
+    const rankAfter = computePlayerRank(
+      computeNetWorth({
+        bankBalance: newBalance,
+        businesses: updatedBusinesses,
+        productPrices: prices,
+        day: newDay,
+        stockHoldings,
+        stockPrices: nextStockPrices,
+        acquiredBuildings,
+        buildingMarketValues: nextMarketValues,
+      }),
+      nextRivalNetWorths
+    );
 
     const entries = [];
     if (isSunday) {
@@ -615,6 +648,18 @@ export const useGameStore = create((set, get) => ({
         })
       );
     }
+    if (rankAfter !== rankBefore) {
+      const improved = rankAfter < rankBefore;
+      entries.push(
+        makeNewsEntry({
+          icon: "trophy",
+          title: improved ? `You climbed to #${rankAfter} on the leaderboard` : `You dropped to #${rankAfter} on the leaderboard`,
+          subtitle: improved ? "You overtook a rival" : "A rival overtook you",
+          tone: improved ? "good" : "bad",
+          day: newDay,
+        })
+      );
+    }
     if (taxDue && otherExpenses > 0) {
       entries.push(
         makeNewsEntry({
@@ -650,6 +695,7 @@ export const useGameStore = create((set, get) => ({
       stockPrices: nextStockPrices,
       stockPriceHistory: nextStockPriceHistory,
       buildingMarketValues: nextMarketValues,
+      rivalNetWorths: nextRivalNetWorths,
       news: [...entries, ...news].slice(0, 30),
       lastDaySummary: {
         day: newDay,

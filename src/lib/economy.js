@@ -1,6 +1,7 @@
 import { BUSINESS_TYPES } from "../data/businessTypes";
 import { STOCKS } from "../data/stocks";
 import { BUILDINGS, buildingById } from "../data/buildings";
+import { RIVALS } from "../data/rivals";
 
 // --- Revenue model -----------------------------------------------------
 //
@@ -463,4 +464,120 @@ export function totalPassiveRentalIncome(acquiredBuildings, businesses) {
     if (occupied) return sum;
     return sum + passiveRentalIncome(building);
   }, 0);
+}
+
+// --- Net worth (Stage 9: Rivals) -----------------------------------------
+//
+// One combined figure summing every asset class the player can hold, used
+// only to rank against rivals on the leaderboard -- never stored, always
+// computed fresh from the live store slices that already exist for each
+// asset class individually.
+//
+// A business's contribution is *capitalized* off its deterministic
+// expected daily revenue (not the noisy actual roll, so net worth doesn't
+// jitter day to day the same amount dailyEarnings does) at a flat
+// multiple -- "worth roughly 250 days of earnings," the same
+// derive-a-price-from-a-stat spirit as building buyPrice being derived
+// from dailyRent, not a separately invented number per business.
+export const BUSINESS_VALUATION_MULTIPLIER = 250;
+
+export function businessValuation(business, building, productPrices, day) {
+  if (!business.active || !building) return 0;
+  return expectedDailyRevenue(business, building, productPrices, day) * BUSINESS_VALUATION_MULTIPLIER;
+}
+
+export function businessesValuation(businesses, productPrices, day) {
+  return businesses.reduce((sum, b) => {
+    const building = buildingById(b.buildingId);
+    return sum + businessValuation(b, building, productPrices, day);
+  }, 0);
+}
+
+export function stockPortfolioValue(stockHoldings, stockPrices) {
+  return STOCKS.reduce((sum, stock) => {
+    const shares = stockHoldings?.[stock.id]?.shares ?? 0;
+    if (!shares) return sum;
+    return sum + shares * (stockPrices?.[stock.id] ?? stock.startPrice);
+  }, 0);
+}
+
+export function realEstatePortfolioValue(acquiredBuildings, buildingMarketValues) {
+  return acquiredBuildings.reduce((sum, a) => {
+    if (a.mode !== "own") return sum;
+    return sum + (buildingMarketValues?.[a.buildingId] ?? 0);
+  }, 0);
+}
+
+export function computeNetWorth({
+  bankBalance,
+  businesses,
+  productPrices,
+  day,
+  stockHoldings,
+  stockPrices,
+  acquiredBuildings,
+  buildingMarketValues,
+}) {
+  return (
+    bankBalance +
+    stockPortfolioValue(stockHoldings, stockPrices) +
+    realEstatePortfolioValue(acquiredBuildings, buildingMarketValues) +
+    businessesValuation(businesses, productPrices, day)
+  );
+}
+
+// --- Rivals (Stage 9) -----------------------------------------------------
+//
+// A small fixed list of fictional AI rivals (data/rivals.js), each with
+// its own daily compound-growth rate and volatility so the leaderboard
+// spreads out realistically instead of moving in lockstep. Unlike stocks
+// (mean-reverting around a fixed price) rivals are meant to trend upward
+// like a real competing empire, so this compounds forward from wherever
+// the rival currently sits rather than pulling back toward a start value
+// -- floored at a fraction of that rival's *starting* net worth so a bad
+// streak shrinks a rival, never wipes them out to zero.
+export const RIVAL_NET_WORTH_FLOOR_RATIO = 0.1;
+
+export function seedRivalNetWorths() {
+  const values = {};
+  for (const rival of RIVALS) values[rival.id] = rival.startingNetWorth;
+  return values;
+}
+
+export function rollRivalNetWorth(rival, currentNetWorth) {
+  const noise = (Math.random() * 2 - 1) * rival.volatility;
+  const next = currentNetWorth * (1 + rival.dailyGrowth + noise);
+  const floor = rival.startingNetWorth * RIVAL_NET_WORTH_FLOOR_RATIO;
+  return Math.max(floor, Math.round(next));
+}
+
+export function rollRivalNetWorths(prevNetWorths) {
+  const values = {};
+  for (const rival of RIVALS) {
+    const current = prevNetWorths?.[rival.id] ?? rival.startingNetWorth;
+    values[rival.id] = rollRivalNetWorth(rival, current);
+  }
+  return values;
+}
+
+// Ranked list of every rival plus the player, descending by net worth --
+// backs both the Rivals screen and the rank-change news check in
+// gameStore.nextDay(). `playerNetWorth` uses computeNetWorth's output.
+export function computeLeaderboard(playerNetWorth, rivalNetWorths) {
+  const entries = [
+    { id: "player", name: "You", netWorth: playerNetWorth, isPlayer: true },
+    ...RIVALS.map((rival) => ({
+      id: rival.id,
+      name: rival.name,
+      netWorth: rivalNetWorths?.[rival.id] ?? rival.startingNetWorth,
+      isPlayer: false,
+    })),
+  ];
+  return entries.sort((a, b) => b.netWorth - a.netWorth);
+}
+
+// 1-indexed -- #1 is the top of the leaderboard.
+export function computePlayerRank(playerNetWorth, rivalNetWorths) {
+  const leaderboard = computeLeaderboard(playerNetWorth, rivalNetWorths);
+  return leaderboard.findIndex((e) => e.isPlayer) + 1;
 }

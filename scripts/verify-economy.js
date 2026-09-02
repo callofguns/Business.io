@@ -21,6 +21,7 @@ const { useGameStore, vacantBuildingsFor } = await import("../src/state/gameStor
 const { BUILDINGS, buildingById, dailyRentFor } = await import("../src/data/buildings.js");
 const { BUSINESS_TYPES, STARTER_BUSINESS_OPTIONS } = await import("../src/data/businessTypes.js");
 const { STOCKS, stockById } = await import("../src/data/stocks.js");
+const { RIVALS, rivalById } = await import("../src/data/rivals.js");
 const {
   expectedDailyRevenue,
   expectedDailyVisitors,
@@ -50,6 +51,17 @@ const {
   MARKET_VALUE_CRASH_MIN,
   MARKET_VALUE_CRASH_MAX,
   RENTAL_INCOME_RATE,
+  BUSINESS_VALUATION_MULTIPLIER,
+  businessValuation,
+  businessesValuation,
+  stockPortfolioValue,
+  realEstatePortfolioValue,
+  computeNetWorth,
+  seedRivalNetWorths,
+  rollRivalNetWorth,
+  computeLeaderboard,
+  computePlayerRank,
+  RIVAL_NET_WORTH_FLOOR_RATIO,
 } = await import("../src/lib/economy.js");
 const { weekdayIndex } = await import("../src/lib/format.js");
 
@@ -135,6 +147,10 @@ section("Initial store state (stock fields) -- checked before any nextDay() call
   check(
     "buildingMarketValues seeded to each building's static buyPrice",
     BUILDINGS.every((b) => s.buildingMarketValues[b.id] === b.buyPrice)
+  );
+  check(
+    "rivalNetWorths seeded to each rival's startingNetWorth",
+    RIVALS.every((r) => s.rivalNetWorths[r.id] === r.startingNetWorth)
   );
 }
 
@@ -1058,6 +1074,174 @@ section("Real estate wired into nextDay (rental income + market value roll)");
 }
 
 // ---------------------------------------------------------------------
+section("Rivals catalog");
+{
+  check("6 rivals total", RIVALS.length === 6);
+  check("unique rival ids", new Set(RIVALS.map((r) => r.id)).size === 6);
+  check("unique rival names", new Set(RIVALS.map((r) => r.name)).size === 6);
+  check(
+    "every rival has positive startingNetWorth/dailyGrowth/volatility",
+    RIVALS.every((r) => r.startingNetWorth > 0 && r.dailyGrowth > 0 && r.volatility > 0)
+  );
+}
+
+// ---------------------------------------------------------------------
+section("Net worth formula");
+{
+  const s = useGameStore.getState();
+  const testShop = s.businesses.find((b) => b.name === "Test Shop");
+  const building = buildingById(testShop.buildingId);
+
+  check(
+    "businessValuation = expectedDailyRevenue * BUSINESS_VALUATION_MULTIPLIER for an active business",
+    businessValuation(testShop, building, s.productPrices, s.day) ===
+      expectedDailyRevenue(testShop, building, s.productPrices, s.day) * BUSINESS_VALUATION_MULTIPLIER
+  );
+  check(
+    "businessValuation is 0 for an inactive business",
+    businessValuation({ ...testShop, active: false }, building, s.productPrices, s.day) === 0
+  );
+  check(
+    "businessesValuation sums every active business's valuation",
+    businessesValuation(s.businesses, s.productPrices, s.day) ===
+      s.businesses.reduce(
+        (sum, b) => sum + businessValuation(b, buildingById(b.buildingId), s.productPrices, s.day),
+        0
+      )
+  );
+
+  check(
+    "stockPortfolioValue sums shares * live price",
+    stockPortfolioValue({ nova: { shares: 3, avgCost: 100 } }, { nova: 150 }) === 450
+  );
+  check("stockPortfolioValue is 0 with no holdings", stockPortfolioValue({}, s.stockPrices) === 0);
+
+  check(
+    "realEstatePortfolioValue sums only 'own' mode entries",
+    realEstatePortfolioValue(
+      [
+        { buildingId: "a", mode: "own" },
+        { buildingId: "b", mode: "rent" },
+      ],
+      { a: 1000000, b: 2000000 }
+    ) === 1000000
+  );
+
+  const netWorth = computeNetWorth({
+    bankBalance: s.bankBalance,
+    businesses: s.businesses,
+    productPrices: s.productPrices,
+    day: s.day,
+    stockHoldings: s.stockHoldings,
+    stockPrices: s.stockPrices,
+    acquiredBuildings: s.acquiredBuildings,
+    buildingMarketValues: s.buildingMarketValues,
+  });
+  const expectedNetWorth =
+    s.bankBalance +
+    stockPortfolioValue(s.stockHoldings, s.stockPrices) +
+    realEstatePortfolioValue(s.acquiredBuildings, s.buildingMarketValues) +
+    businessesValuation(s.businesses, s.productPrices, s.day);
+  check(
+    "computeNetWorth sums bankBalance + stocks + real estate + businesses",
+    Math.abs(netWorth - expectedNetWorth) < 1e-6
+  );
+}
+
+// ---------------------------------------------------------------------
+section("Rival net worth rolls");
+{
+  const rival = RIVALS[0];
+  const floor = rival.startingNetWorth * RIVAL_NET_WORTH_FLOOR_RATIO;
+
+  let minSeen = Infinity;
+  for (let i = 0; i < 500; i++) {
+    minSeen = Math.min(minSeen, rollRivalNetWorth(rival, floor * 0.5));
+  }
+  check("rollRivalNetWorth respects RIVAL_NET_WORTH_FLOOR_RATIO", minSeen >= floor - 1);
+
+  const start = rival.startingNetWorth * 5; // comfortably clear of the floor
+  let sawIncrease = false;
+  let sawDecrease = false;
+  let allWithinBounds = true;
+  for (let i = 0; i < 2000; i++) {
+    const value = rollRivalNetWorth(rival, start);
+    if (value > start) sawIncrease = true;
+    if (value < start) sawDecrease = true;
+    const lo = start * (1 + rival.dailyGrowth - rival.volatility);
+    const hi = start * (1 + rival.dailyGrowth + rival.volatility);
+    if (value < lo - 1 || value > hi + 1) allWithinBounds = false;
+  }
+  check("rollRivalNetWorth can both grow and shrink day to day", sawIncrease && sawDecrease);
+  check("every rolled value stays within [growth-volatility, growth+volatility] of current", allWithinBounds);
+}
+
+// ---------------------------------------------------------------------
+section("Leaderboard / rank");
+{
+  const rivalNetWorths = seedRivalNetWorths();
+  const leaderboardLow = computeLeaderboard(0, rivalNetWorths);
+  check("leaderboard has 7 entries (6 rivals + player)", leaderboardLow.length === 7);
+  check(
+    "leaderboard sorted descending by net worth",
+    leaderboardLow.every((e, i) => i === 0 || leaderboardLow[i - 1].netWorth >= e.netWorth)
+  );
+  check("player ranks last with net worth 0", computePlayerRank(0, rivalNetWorths) === 7);
+
+  const leaderboardHigh = computeLeaderboard(1e12, rivalNetWorths);
+  check("player ranks first with an enormous net worth", computePlayerRank(1e12, rivalNetWorths) === 1);
+  check("leaderboard's top entry is the player when they rank first", leaderboardHigh[0].isPlayer);
+
+  const midNetWorth = rivalById("sable-capital").startingNetWorth + 1; // just above Sable Capital
+  const rank = computePlayerRank(midNetWorth, rivalNetWorths);
+  const rivalsAbove = RIVALS.filter((r) => rivalNetWorths[r.id] > midNetWorth).length;
+  check("mid-pack net worth ranks correctly relative to rivals", rank === rivalsAbove + 1);
+}
+
+// ---------------------------------------------------------------------
+section("Rivals wired into nextDay (roll + rank-change news)");
+{
+  const before = useGameStore.getState();
+  const netWorthBefore = computeNetWorth({
+    bankBalance: before.bankBalance,
+    businesses: before.businesses,
+    productPrices: before.productPrices,
+    day: before.day,
+    stockHoldings: before.stockHoldings,
+    stockPrices: before.stockPrices,
+    acquiredBuildings: before.acquiredBuildings,
+    buildingMarketValues: before.buildingMarketValues,
+  });
+  const rankBefore = computePlayerRank(netWorthBefore, before.rivalNetWorths);
+
+  before.nextDay();
+  const after = useGameStore.getState();
+
+  check(
+    "every rival's net worth changed after nextDay (daily roll)",
+    RIVALS.every((r) => after.rivalNetWorths[r.id] !== before.rivalNetWorths[r.id])
+  );
+
+  const netWorthAfter = computeNetWorth({
+    bankBalance: after.bankBalance,
+    businesses: after.businesses,
+    productPrices: after.productPrices,
+    day: after.day,
+    stockHoldings: after.stockHoldings,
+    stockPrices: after.stockPrices,
+    acquiredBuildings: after.acquiredBuildings,
+    buildingMarketValues: after.buildingMarketValues,
+  });
+  const rankAfter = computePlayerRank(netWorthAfter, after.rivalNetWorths);
+  const rankChangeExpected = rankAfter !== rankBefore;
+  const rankChangeNewsPresent = after.news.some((n) => n.icon === "trophy" && n.day === after.day);
+  check(
+    "a rank-change news entry appears exactly when the rank actually changed",
+    rankChangeNewsPresent === rankChangeExpected
+  );
+}
+
+// ---------------------------------------------------------------------
 section("30-day soak (no NaN/Infinity, news capped)");
 {
   // hire someone so wages are actually exercised through the soak, not left
@@ -1133,6 +1317,30 @@ section("30-day soak (no NaN/Infinity, news capped)");
   check(
     "lastDaySummary.rentalIncome finite and non-negative",
     isFinite_(s.lastDaySummary.rentalIncome) && s.lastDaySummary.rentalIncome >= 0
+  );
+  check(
+    "all rival net worths finite and at least their floor after the soak",
+    RIVALS.every((r) => {
+      const v = s.rivalNetWorths[r.id];
+      return isFinite_(v) && v >= r.startingNetWorth * RIVAL_NET_WORTH_FLOOR_RATIO - 1;
+    })
+  );
+  check(
+    "computePlayerRank on the final state returns a rank within [1,7]",
+    (() => {
+      const netWorth = computeNetWorth({
+        bankBalance: s.bankBalance,
+        businesses: s.businesses,
+        productPrices: s.productPrices,
+        day: s.day,
+        stockHoldings: s.stockHoldings,
+        stockPrices: s.stockPrices,
+        acquiredBuildings: s.acquiredBuildings,
+        buildingMarketValues: s.buildingMarketValues,
+      });
+      const rank = computePlayerRank(netWorth, s.rivalNetWorths);
+      return rank >= 1 && rank <= 7;
+    })()
   );
   console.log(`  tax: accrued=${s.taxAccrued.toFixed(2)} history=${s.taxHistory.length} entries`);
   console.log(`  final day=${s.day} bankBalance=${s.bankBalance.toFixed(2)}`);

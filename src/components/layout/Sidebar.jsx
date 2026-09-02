@@ -28,7 +28,7 @@ const NAV_ITEMS = [
   { key: "finance", label: "Finance Manager", icon: LineChart, enabled: true },
   { key: "realestate", label: "Real Estate", icon: Landmark, enabled: true },
   { key: "tax", label: "Tax Office", icon: Receipt, enabled: true },
-  { key: "rivals", label: "Rivals", icon: Trophy, enabled: false },
+  { key: "rivals", label: "Rivals", icon: Trophy, enabled: true },
 ];
 
 export function Sidebar({ current, onNavigate }) {
