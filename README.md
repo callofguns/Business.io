@@ -69,7 +69,14 @@ npm run dev
   shown as a new "Dividends" line in the Day Summary — the other half only pays off through
   price appreciation. See `src/data/stocks.js` for the stock list and `src/lib/economy.js`
   for the price/dividend formulas.
-- [ ] Stage 7 — Real estate investments
+- [x] Stage 7 — Real estate investments: extends the Marketplace building catalog into an
+  investable asset — every building's buy-outright price is now a live market value that
+  drifts up ~0.08%/day, with a small daily chance of a real crash (10-25% down, floored at
+  50% of the original price), instead of a frozen number. An owned building not occupied by
+  your own business earns passive rental income from a third-party tenant. The new Real
+  Estate screen tracks your owned buildings as a portfolio — purchase price vs. live value,
+  rental income, and a Sell button. See `src/lib/economy.js` for the growth/crash/rental
+  formulas.
 - [x] Stage 8 — Tax Office: a flat 15% tax on daily net business profit (revenue minus rent)
   accrues automatically and is filed — deducted from your bank, shown as the Day Summary's
   "Other Expenses" line — every 30 days, or any time from the Tax Office screen's "Pay Now".

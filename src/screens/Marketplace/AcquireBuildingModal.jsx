@@ -16,6 +16,7 @@ import { formatMoney } from "../../lib/format";
 export function AcquireBuildingModal({ building, onClose }) {
   const bankBalance = useGameStore((s) => s.bankBalance);
   const acquireBuilding = useGameStore((s) => s.acquireBuilding);
+  const buildingMarketValues = useGameStore((s) => s.buildingMarketValues);
   const currency = useCurrencyStore((s) => s.currency);
   const [mode, setMode] = useState(null);
   const [displayBuilding, setDisplayBuilding] = useState(building);
@@ -40,9 +41,12 @@ export function AcquireBuildingModal({ building, onClose }) {
 
   if (!displayBuilding) return null;
 
+  // Buying (not renting) costs the building's live market value, not the
+  // frozen buyPrice -- see buildingMarketValues/rollMarketValues.
+  const marketValue = buildingMarketValues[displayBuilding.id] ?? displayBuilding.buyPrice;
   const canRent = bankBalance >= displayBuilding.rentDeposit;
-  const canBuy = bankBalance >= displayBuilding.buyPrice;
-  const cost = mode === "own" ? displayBuilding.buyPrice : mode === "rent" ? displayBuilding.rentDeposit : null;
+  const canBuy = bankBalance >= marketValue;
+  const cost = mode === "own" ? marketValue : mode === "rent" ? displayBuilding.rentDeposit : null;
   const canConfirm = mode !== null && bankBalance >= cost;
 
   return (
@@ -107,7 +111,7 @@ export function AcquireBuildingModal({ building, onClose }) {
               <p className="text-[12px] text-ink-faint">Own outright · No rent, ever</p>
             </div>
             <p className="shrink-0 text-[15px] font-bold text-ink">
-              {formatMoney(displayBuilding.buyPrice, { currency })}
+              {formatMoney(marketValue, { currency })}
             </p>
           </button>
         </div>

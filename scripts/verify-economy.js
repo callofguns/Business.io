@@ -42,6 +42,14 @@ const {
   dividendPayout,
   totalDailyDividends,
   STOCK_MIN_PRICE_FLOOR,
+  rollMarketValue,
+  passiveRentalIncome,
+  totalPassiveRentalIncome,
+  MARKET_VALUE_FLOOR_RATIO,
+  MARKET_VALUE_DAILY_GROWTH,
+  MARKET_VALUE_CRASH_MIN,
+  MARKET_VALUE_CRASH_MAX,
+  RENTAL_INCOME_RATE,
 } = await import("../src/lib/economy.js");
 const { weekdayIndex } = await import("../src/lib/format.js");
 
@@ -124,6 +132,10 @@ section("Initial store state (stock fields) -- checked before any nextDay() call
     })
   );
   check("stockHoldings starts empty", Object.keys(s.stockHoldings).length === 0);
+  check(
+    "buildingMarketValues seeded to each building's static buyPrice",
+    BUILDINGS.every((b) => s.buildingMarketValues[b.id] === b.buyPrice)
+  );
 }
 
 // ---------------------------------------------------------------------
@@ -867,6 +879,185 @@ section("Stock prices roll daily + dividends paid via nextDay");
 }
 
 // ---------------------------------------------------------------------
+section("Real estate market values");
+{
+  const building = BUILDINGS[0];
+  const floor = building.buyPrice * MARKET_VALUE_FLOOR_RATIO;
+
+  // floor: starting well below it, both the crash and growth branches must
+  // still clamp back up to it
+  let minSeen = Infinity;
+  for (let i = 0; i < 500; i++) {
+    minSeen = Math.min(minSeen, rollMarketValue(building, floor * 0.5).value);
+  }
+  check("rollMarketValue respects MARKET_VALUE_FLOOR_RATIO", minSeen >= floor - 1);
+
+  // growth vs. crash: roll many times from a value comfortably clear of the
+  // floor so both branches are reachable, and confirm every single roll
+  // matches one of the two formulas exactly (not just "is in some range")
+  const start = building.buyPrice * 2;
+  let sawGrowth = false;
+  let sawCrash = false;
+  let allMatchFormula = true;
+  for (let i = 0; i < 2000; i++) {
+    const { value, crashed } = rollMarketValue(building, start);
+    if (crashed) {
+      sawCrash = true;
+      const drop = 1 - value / start;
+      if (drop < MARKET_VALUE_CRASH_MIN - 0.001 || drop > MARKET_VALUE_CRASH_MAX + 0.001) allMatchFormula = false;
+    } else {
+      sawGrowth = true;
+      if (value !== Math.round(start * (1 + MARKET_VALUE_DAILY_GROWTH))) allMatchFormula = false;
+    }
+  }
+  check("a normal day grows by exactly MARKET_VALUE_DAILY_GROWTH", sawGrowth);
+  check("a crash day (rare, ~1%/day) does occur across enough trials", sawCrash);
+  check("every rolled value matches the growth or crash formula exactly", allMatchFormula);
+}
+
+// ---------------------------------------------------------------------
+section("Passive rental income");
+{
+  const building = BUILDINGS[0];
+  check(
+    "passiveRentalIncome = dailyRent * RENTAL_INCOME_RATE",
+    passiveRentalIncome(building) === Math.round(building.dailyRent * RENTAL_INCOME_RATE)
+  );
+
+  const ownedVacant = [{ buildingId: building.id, mode: "own" }];
+  check(
+    "totalPassiveRentalIncome counts an owned, unoccupied building",
+    totalPassiveRentalIncome(ownedVacant, []) === passiveRentalIncome(building)
+  );
+
+  const occupyingBiz = [{ buildingId: building.id, active: true }];
+  check(
+    "totalPassiveRentalIncome excludes an owned building occupied by an active business",
+    totalPassiveRentalIncome(ownedVacant, occupyingBiz) === 0
+  );
+
+  const rentedBuilding = [{ buildingId: building.id, mode: "rent" }];
+  check(
+    "totalPassiveRentalIncome excludes rented (not owned) buildings",
+    totalPassiveRentalIncome(rentedBuilding, []) === 0
+  );
+
+  const inactiveBiz = [{ buildingId: building.id, active: false }];
+  check(
+    "an inactive business doesn't block rental income (counts as vacant)",
+    totalPassiveRentalIncome(ownedVacant, inactiveBiz) === passiveRentalIncome(building)
+  );
+}
+
+// ---------------------------------------------------------------------
+section("sellBuilding + dynamic buy price");
+{
+  useGameStore.setState({ bankBalance: 20000000 }); // plenty of headroom to buy outright
+  const s0 = useGameStore.getState();
+  const targetBuilding = BUILDINGS.find(
+    (b) => b.type === "retail" && !s0.acquiredBuildings.some((a) => a.buildingId === b.id)
+  );
+  const marketValueBefore = s0.buildingMarketValues[targetBuilding.id];
+
+  s0.acquireBuilding({ buildingId: targetBuilding.id, mode: "own" });
+  const afterBuy = useGameStore.getState();
+  check(
+    "buying 'own' costs the live market value, not a frozen buyPrice",
+    afterBuy.bankBalance === 20000000 - marketValueBefore
+  );
+  check(
+    "acquiredBuildings gained an 'own' entry",
+    afterBuy.acquiredBuildings.some((a) => a.buildingId === targetBuilding.id && a.mode === "own")
+  );
+
+  // selling an unoccupied owned building succeeds at the live market value
+  const balanceBeforeSell = afterBuy.bankBalance;
+  const priceAtSell = afterBuy.buildingMarketValues[targetBuilding.id];
+  afterBuy.sellBuilding({ buildingId: targetBuilding.id });
+  const afterSell = useGameStore.getState();
+  check("selling credits the live market value", afterSell.bankBalance === balanceBeforeSell + priceAtSell);
+  check(
+    "acquiredBuildings entry removed after selling",
+    !afterSell.acquiredBuildings.some((a) => a.buildingId === targetBuilding.id)
+  );
+
+  // re-buy it, start a business there, and confirm selling is blocked while occupied
+  useGameStore.getState().acquireBuilding({ buildingId: targetBuilding.id, mode: "own" });
+  useGameStore
+    .getState()
+    .startBusiness({ type: "Small Shop", name: "Landlord Test Shop", buildingId: targetBuilding.id });
+  const occupiedBalance = useGameStore.getState().bankBalance;
+  useGameStore.getState().sellBuilding({ buildingId: targetBuilding.id });
+  check(
+    "selling is blocked while the player's own business occupies it",
+    useGameStore.getState().bankBalance === occupiedBalance &&
+      useGameStore.getState().acquiredBuildings.some((a) => a.buildingId === targetBuilding.id)
+  );
+
+  // selling a *rented* (not owned) building is a no-op
+  const rentedEntry = useGameStore.getState().acquiredBuildings.find((a) => a.mode === "rent");
+  const balanceBeforeRentSell = useGameStore.getState().bankBalance;
+  useGameStore.getState().sellBuilding({ buildingId: rentedEntry.buildingId });
+  check(
+    "selling a rented (not owned) building is a no-op",
+    useGameStore.getState().bankBalance === balanceBeforeRentSell &&
+      useGameStore.getState().acquiredBuildings.some((a) => a.buildingId === rentedEntry.buildingId)
+  );
+
+  // selling an unacquired/unknown building id is a no-op
+  const balanceBeforeUnknown = useGameStore.getState().bankBalance;
+  useGameStore.getState().sellBuilding({ buildingId: "does-not-exist" });
+  check("selling an unacquired building is a no-op", useGameStore.getState().bankBalance === balanceBeforeUnknown);
+
+  // buy a *second* building and leave it vacant (no business started) --
+  // targetBuilding above ended up owned-and-occupied, so this is the one
+  // the next section's passive-rental-income check needs
+  const s1 = useGameStore.getState();
+  const vacantOwnedBuilding = BUILDINGS.find(
+    (b) => b.id !== targetBuilding.id && !s1.acquiredBuildings.some((a) => a.buildingId === b.id)
+  );
+  s1.acquireBuilding({ buildingId: vacantOwnedBuilding.id, mode: "own" });
+  check(
+    "second building bought and left vacant for the rental-income check",
+    useGameStore
+      .getState()
+      .acquiredBuildings.some((a) => a.buildingId === vacantOwnedBuilding.id && a.mode === "own")
+  );
+}
+
+// ---------------------------------------------------------------------
+section("Real estate wired into nextDay (rental income + market value roll)");
+{
+  const before = useGameStore.getState();
+  const dayBefore = before.day;
+  before.nextDay();
+  const after = useGameStore.getState();
+
+  check(
+    "every building's market value changed after nextDay (daily roll)",
+    BUILDINGS.every((b) => after.buildingMarketValues[b.id] !== before.buildingMarketValues[b.id])
+  );
+  check("lastDaySummary.rentalIncome > 0 with an owned, vacant building", after.lastDaySummary.rentalIncome > 0);
+  check(
+    "rentalIncome credited to bankBalance via netChange",
+    Math.abs(
+      after.lastDaySummary.netChange -
+        (after.lastDaySummary.revenue -
+          after.lastDaySummary.rent -
+          after.lastDaySummary.wages -
+          after.lastDaySummary.otherExpenses +
+          after.lastDaySummary.dividends +
+          after.lastDaySummary.rentalIncome)
+    ) < 1e-9
+  );
+  check(
+    "a 'Rental income collected' news entry was recorded",
+    after.news.some((n) => n.icon === "landmark" && n.title === "Rental income collected")
+  );
+  check("day advanced by 1", after.day === dayBefore + 1);
+}
+
+// ---------------------------------------------------------------------
 section("30-day soak (no NaN/Infinity, news capped)");
 {
   // hire someone so wages are actually exercised through the soak, not left
@@ -931,6 +1122,17 @@ section("30-day soak (no NaN/Infinity, news capped)");
   check(
     "lastDaySummary.dividends finite and non-negative",
     isFinite_(s.lastDaySummary.dividends) && s.lastDaySummary.dividends >= 0
+  );
+  check(
+    "all building market values finite and at least their floor after the soak",
+    BUILDINGS.every((b) => {
+      const v = s.buildingMarketValues[b.id];
+      return isFinite_(v) && v >= b.buyPrice * MARKET_VALUE_FLOOR_RATIO - 1;
+    })
+  );
+  check(
+    "lastDaySummary.rentalIncome finite and non-negative",
+    isFinite_(s.lastDaySummary.rentalIncome) && s.lastDaySummary.rentalIncome >= 0
   );
   console.log(`  tax: accrued=${s.taxAccrued.toFixed(2)} history=${s.taxHistory.length} entries`);
   console.log(`  final day=${s.day} bankBalance=${s.bankBalance.toFixed(2)}`);

@@ -19,6 +19,7 @@ export function BuildingCard({ building, view, onAcquire }) {
     s.acquiredBuildings.find((a) => a.buildingId === building.id)
   );
   const occupant = useGameStore((s) => buildingOccupant(s, building.id));
+  const marketValue = useGameStore((s) => s.buildingMarketValues[building.id] ?? building.buyPrice);
   const setScreen = useUiStore((s) => s.setScreen);
   const currency = useCurrencyStore((s) => s.currency);
 
@@ -50,7 +51,7 @@ export function BuildingCard({ building, view, onAcquire }) {
           <IconRow icon={Banknote} iconClassName="text-good-500">
             {formatMoney(building.dailyRent, { currency })}/day rent
           </IconRow>
-          <IconRow icon={Landmark}>{formatMoney(building.buyPrice, { currency })} to buy</IconRow>
+          <IconRow icon={Landmark}>{formatMoney(marketValue, { currency })} to buy</IconRow>
         </div>
 
         <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
