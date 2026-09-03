@@ -11,6 +11,11 @@ export default defineConfig({
   // Repo is "Business.io" (capital B) -- GH Pages project-site paths are
   // case-sensitive, so this must match the repo name exactly.
   base,
+  // Binds beyond localhost so the dev server is reachable from a real phone
+  // on the LAN for mobile testing (`npm run dev` then open the Network URL).
+  server: {
+    host: true,
+  },
   plugins: [
     react(),
     tailwindcss(),

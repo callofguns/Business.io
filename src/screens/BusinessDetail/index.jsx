@@ -11,6 +11,7 @@ import { StatCard } from "../../components/ui/StatCard";
 import { useGameStore } from "../../state/gameStore";
 import { useUiStore } from "../../state/uiStore";
 import { useCurrencyStore } from "../../state/currencyStore";
+import { Page } from "../../components/layout/Page";
 import { formatMoney } from "../../lib/format";
 import { buildingById } from "../../data/buildings";
 import { dailyWagePerStaff, promotionCost, isPromotionActive } from "../../lib/economy";
@@ -44,7 +45,7 @@ export function BusinessDetail() {
 
   if (!business) {
     return (
-      <div className="mx-auto max-w-3xl px-10 py-10">
+      <Page>
         <button
           type="button"
           onClick={backToEmpire}
@@ -53,8 +54,11 @@ export function BusinessDetail() {
           <ArrowLeft size={14} strokeWidth={2.5} />
           Back to My Empire
         </button>
-        <p className="mt-6 text-[14px] text-ink-faint">Business not found.</p>
-      </div>
+        <p className="mt-6 text-[14px] font-semibold text-ink">Business not found</p>
+        <p className="mt-1 text-[13px] text-ink-faint">
+          Head back to My Empire to see your businesses.
+        </p>
+      </Page>
     );
   }
 
@@ -71,7 +75,7 @@ export function BusinessDetail() {
   const promoDaysLeft = promoActive ? business.promotionEndDay - day : 0;
 
   return (
-    <div className="mx-auto max-w-3xl px-10 py-10">
+    <Page>
       <button
         type="button"
         onClick={backToEmpire}
@@ -81,7 +85,7 @@ export function BusinessDetail() {
         Back to My Empire
       </button>
 
-      <div className="mt-4 flex items-center gap-4">
+      <div className="mt-4 flex flex-wrap items-center gap-4">
         <BusinessTypeIcon type={business.type} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -104,7 +108,7 @@ export function BusinessDetail() {
         </PillButton>
       </div>
 
-      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard
           icon={Banknote}
           tone="good"
@@ -153,7 +157,14 @@ export function BusinessDetail() {
             market price builds it up, overcharging wears it down. Higher satisfaction brings in
             more customers on top of pricing itself.
           </p>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface-sunken">
+          <div
+            role="progressbar"
+            aria-valuenow={satisfaction}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label="Satisfaction"
+            className="mt-3 h-2 overflow-hidden rounded-full bg-surface-sunken"
+          >
             <div
               className={clsx(
                 "h-full rounded-full",
@@ -171,7 +182,7 @@ export function BusinessDetail() {
         <Card>
           <SectionHeading icon={Megaphone} title="Promotion" subtitle="Run a marketing campaign" />
           {promoActive ? (
-            <div className="flex items-center justify-between gap-3 rounded-2xl bg-surface-sunken px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-surface-sunken px-4 py-3">
               <div>
                 <p className="text-[13px] font-bold text-ink">Campaign active</p>
                 <p className="text-[12px] text-ink-faint">
@@ -183,9 +194,10 @@ export function BusinessDetail() {
               </Badge>
             </div>
           ) : (
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-[12.5px] text-ink-faint">
                 {formatMoney(promoCost, { currency })} for +50% traffic, 3 days.
+                {!canAffordPromo ? " Not enough funds." : ""}
               </p>
               <PillButton
                 size="sm"
@@ -204,7 +216,7 @@ export function BusinessDetail() {
       {building ? (
         <Card className="mt-4">
           <SectionHeading icon={Users} title="Staff" subtitle="Hire employees to grow how many customers you can serve" />
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-[12.5px] text-ink-faint">
               {staffCount} staff hired · {formatMoney(staffCount * dailyWage, { currency })}/day in wages
             </p>
@@ -221,6 +233,6 @@ export function BusinessDetail() {
       ) : null}
 
       <ProductsModal business={pricingOpen ? business : null} onClose={() => setPricingOpen(false)} />
-    </div>
+    </Page>
   );
 }

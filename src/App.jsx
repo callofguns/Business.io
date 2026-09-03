@@ -1,5 +1,7 @@
 import { useEffect } from "react";
+import { MotionConfig } from "framer-motion";
 import { AppShell } from "./components/layout/AppShell";
+import { WelcomeModal } from "./components/layout/WelcomeModal";
 import { Home } from "./screens/Home";
 import { MyEmpire } from "./screens/MyEmpire";
 import { Marketplace } from "./screens/Marketplace";
@@ -42,13 +44,23 @@ export default function App() {
   // screen-to-screen transitions, and nesting a second one around it (for
   // the login <-> app swap) caused a runaway render loop that hung the tab.
   // Login still gets its own self-contained entrance animation.
+  // MotionConfig is a plain context provider (not an AnimatePresence), so
+  // wrapping everything in it to honor prefers-reduced-motion doesn't
+  // reintroduce that hazard.
   if (!playerName) {
-    return <Login />;
+    return (
+      <MotionConfig reducedMotion="user">
+        <Login />
+      </MotionConfig>
+    );
   }
 
   return (
-    <AppShell screen={screen} onNavigate={setScreen}>
-      <ScreenComponent />
-    </AppShell>
+    <MotionConfig reducedMotion="user">
+      <AppShell screen={screen} onNavigate={setScreen}>
+        <ScreenComponent />
+      </AppShell>
+      <WelcomeModal />
+    </MotionConfig>
   );
 }

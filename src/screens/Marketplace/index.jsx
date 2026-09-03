@@ -4,6 +4,9 @@ import { Landmark } from "lucide-react";
 import clsx from "clsx";
 import { BUILDINGS } from "../../data/buildings";
 import { useGameStore } from "../../state/gameStore";
+import { StatPill } from "../../components/ui/StatPill";
+import { PillButton } from "../../components/ui/Button";
+import { Page } from "../../components/layout/Page";
 import { BuildingCard } from "./BuildingCard";
 import { AcquireBuildingModal } from "./AcquireBuildingModal";
 
@@ -34,27 +37,50 @@ export function Marketplace() {
     return [...list].sort((a, b) => a.dailyRent - b.dailyRent);
   }, [view, typeFilter, acquiredIds]);
 
+  const isFiltered = typeFilter !== "all";
+  const emptyState =
+    view === "my-buildings" && acquiredBuildings.length > 0 && isFiltered
+      ? {
+          title: `No ${typeFilter} buildings owned`,
+          body: "You own buildings of a different type. Clear the filter to see them.",
+          action: { label: "Clear filter", onClick: () => setTypeFilter("all") },
+        }
+      : view === "my-buildings"
+      ? {
+          title: "No buildings yet",
+          body: "Acquire a building from the Market tab to see it here.",
+          action: { label: "Browse Market", onClick: () => setView("market") },
+        }
+      : {
+          title: `No ${typeFilter} buildings`,
+          body: "Try a different filter.",
+          action: { label: "Clear filter", onClick: () => setTypeFilter("all") },
+        };
+
   return (
-    <div className="mx-auto max-w-5xl px-10 py-10">
-      <div className="mb-6 flex items-start justify-between gap-4">
+    <Page maxWidth="5xl">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-[28px] font-extrabold tracking-tight text-ink">Marketplace</h1>
           <p className="mt-1 text-[14px] text-ink-faint">Buy or lease space for your businesses</p>
         </div>
-        <span className="flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5 text-[13px] font-bold text-brand-600">
-          <Landmark size={15} strokeWidth={2.5} />
-          {acquiredBuildings.length}
-        </span>
+        <StatPill icon={Landmark}>{acquiredBuildings.length}</StatPill>
       </div>
 
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="relative inline-flex items-center gap-1 rounded-pill bg-surface-sunken p-1">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div
+          role="tablist"
+          aria-label="Marketplace view"
+          className="relative inline-flex items-center gap-1 rounded-pill bg-surface-sunken p-1"
+        >
           {VIEWS.map((v) => {
             const active = view === v.key;
             return (
               <button
                 key={v.key}
                 type="button"
+                role="tab"
+                aria-selected={active}
                 onClick={() => setView(v.key)}
                 className="relative rounded-pill px-4 py-1.5 text-[13px] font-bold"
               >
@@ -71,13 +97,14 @@ export function Marketplace() {
           })}
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           {TYPE_FILTERS.map((f) => {
             const active = typeFilter === f.key;
             return (
               <button
                 key={f.key}
                 type="button"
+                aria-pressed={active}
                 onClick={() => setTypeFilter(f.key)}
                 className={clsx(
                   "rounded-pill px-3 py-1.5 text-[12.5px] font-bold transition-colors",
@@ -93,13 +120,14 @@ export function Marketplace() {
 
       {listedBuildings.length === 0 ? (
         <div className="rounded-card border border-dashed border-border-strong bg-surface px-6 py-14 text-center">
-          <p className="text-[15px] font-semibold text-ink">No buildings yet</p>
-          <p className="mt-1 text-[13px] text-ink-faint">
-            Acquire a building from the Market tab to see it here.
-          </p>
+          <p className="text-[15px] font-semibold text-ink">{emptyState.title}</p>
+          <p className="mt-1 text-[13px] text-ink-faint">{emptyState.body}</p>
+          <PillButton size="sm" variant="outline" className="mt-4" onClick={emptyState.action.onClick}>
+            {emptyState.action.label}
+          </PillButton>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {listedBuildings.map((building) => (
             <BuildingCard
               key={building.id}
@@ -112,6 +140,6 @@ export function Marketplace() {
       )}
 
       <AcquireBuildingModal building={selectedBuilding} onClose={() => setSelectedBuilding(null)} />
-    </div>
+    </Page>
   );
 }

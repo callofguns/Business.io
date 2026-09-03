@@ -24,8 +24,16 @@ export function StaffCard({ business }) {
   const totalWage = staffCount * dailyWage;
 
   const hire = staffHireCost(business, building);
-  const canHire = hire && bankBalance >= hire.fee;
+  const canAffordHire = hire && bankBalance >= hire.fee;
+  const canHire = !!canAffordHire;
   const canFire = !!staffFireResult(business, building);
+
+  const hireReason = !hire
+    ? "Fully staffed for this building"
+    : !canAffordHire
+    ? "Not enough funds"
+    : `Hire for ${formatMoney(hire.fee, { currency })} + ${formatMoney(hire.dailyWage, { currency })}/day`;
+  const fireReason = canFire ? "Let go frees up a staff slot" : "No staff to let go";
 
   return (
     <Card className="flex flex-col gap-3">
@@ -51,18 +59,15 @@ export function StaffCard({ business }) {
         </IconRow>
       </div>
 
-      <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
-        <p className="text-[12.5px] font-medium text-ink-faint">
-          {hire
-            ? `Hire for ${formatMoney(hire.fee, { currency })} + ${formatMoney(hire.dailyWage, { currency })}/day`
-            : "Fully staffed for this building"}
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+        <p className="text-[12.5px] font-medium text-ink-faint">{hireReason}</p>
         <div className="flex items-center gap-2">
           <PillButton
             size="sm"
             variant="outline"
             icon={UserMinus}
             disabled={!canFire}
+            title={fireReason}
             onClick={() => fireStaff({ businessId: business.id })}
           >
             Let go

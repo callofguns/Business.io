@@ -1,48 +1,21 @@
-import { useState } from "react";
-import {
-  Home,
-  Building2,
-  ShoppingBag,
-  Users,
-  LineChart,
-  Landmark,
-  Receipt,
-  Trophy,
-  Lock,
-  LogOut,
-  Settings,
-} from "lucide-react";
+import { LogOut, Settings } from "lucide-react";
 import clsx from "clsx";
-import { SettingsModal } from "./SettingsModal";
-import { ChangelogModal } from "./ChangelogModal";
+import { NAV_ITEMS } from "./navItems";
 import { useAuthStore } from "../../state/authStore";
 
-// Only "home" is wired up in this stage. The rest are listed so the shell's
-// structure doesn't change shape as later stages come online — they just
-// flip from disabled to enabled one at a time.
-const NAV_ITEMS = [
-  { key: "home", label: "Home", icon: Home, enabled: true },
-  { key: "empire", label: "My Empire", icon: Building2, enabled: true },
-  { key: "marketplace", label: "Marketplace", icon: ShoppingBag, enabled: true },
-  { key: "hiring", label: "Hiring", icon: Users, enabled: true },
-  { key: "finance", label: "Finance Manager", icon: LineChart, enabled: true },
-  { key: "realestate", label: "Real Estate", icon: Landmark, enabled: true },
-  { key: "tax", label: "Tax Office", icon: Receipt, enabled: true },
-  { key: "rivals", label: "Rivals", icon: Trophy, enabled: true },
-];
-
-export function Sidebar({ current, onNavigate }) {
+// Desktop only — hidden below md, where MobileTabBar + MoreSheet take over.
+// Settings/Changelog are owned by AppShell now (see AppShell.jsx) so they
+// can be opened from either this sidebar or the mobile MoreSheet.
+export function Sidebar({ current, onNavigate, onOpenSettings }) {
   const playerName = useAuthStore((s) => s.playerName);
   const logout = useAuthStore((s) => s.logout);
   const initial = playerName ? playerName.trim().charAt(0).toUpperCase() : "?";
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [changelogOpen, setChangelogOpen] = useState(false);
 
   return (
-    <aside className="flex h-full w-64 shrink-0 flex-col border-r border-border bg-surface px-4 py-6">
+    <aside className="hidden h-full w-64 shrink-0 flex-col border-r border-border bg-surface px-4 py-6 md:flex">
       <div className="mb-6 flex items-center gap-2.5 px-2">
         <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-500 text-lg">
-          🏙️
+          <span aria-hidden="true">🏙️</span>
         </span>
         <span className="text-[17px] font-extrabold tracking-tight text-ink">business.io</span>
       </div>
@@ -65,7 +38,7 @@ export function Sidebar({ current, onNavigate }) {
         </button>
       </div>
 
-      <nav className="flex flex-1 flex-col gap-1">
+      <nav aria-label="Primary" className="flex flex-1 flex-col gap-1">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           // The Business Detail screen is reached from My Empire and has no
@@ -75,20 +48,15 @@ export function Sidebar({ current, onNavigate }) {
           return (
             <button
               key={item.key}
-              disabled={!item.enabled}
-              onClick={() => item.enabled && onNavigate(item.key)}
+              aria-current={active ? "page" : undefined}
+              onClick={() => onNavigate(item.key)}
               className={clsx(
                 "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold transition-colors",
-                active
-                  ? "bg-brand-50 text-brand-600"
-                  : item.enabled
-                  ? "text-ink-soft hover:bg-surface-sunken hover:text-ink"
-                  : "cursor-not-allowed text-ink-faint/70"
+                active ? "bg-brand-50 text-brand-600" : "text-ink-soft hover:bg-surface-sunken hover:text-ink"
               )}
             >
               <Icon size={18} strokeWidth={2.25} />
               <span className="flex-1">{item.label}</span>
-              {!item.enabled ? <Lock size={13} className="text-ink-faint/70" /> : null}
             </button>
           );
         })}
@@ -97,26 +65,13 @@ export function Sidebar({ current, onNavigate }) {
       <div className="flex flex-col gap-3">
         <button
           type="button"
-          onClick={() => setSettingsOpen(true)}
+          onClick={onOpenSettings}
           className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-ink-soft hover:bg-surface-sunken hover:text-ink"
         >
           <Settings size={18} strokeWidth={2.25} />
           <span className="flex-1">Settings</span>
         </button>
-        <div className="rounded-xl bg-surface-sunken px-3 py-3 text-[12px] text-ink-faint">
-          More screens unlock as we build them out, stage by stage.
-        </div>
       </div>
-
-      <SettingsModal
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        onOpenChangelog={() => {
-          setSettingsOpen(false);
-          setChangelogOpen(true);
-        }}
-      />
-      <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />
     </aside>
   );
 }

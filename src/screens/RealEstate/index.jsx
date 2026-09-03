@@ -3,6 +3,8 @@ import { useGameStore } from "../../state/gameStore";
 import { useUiStore } from "../../state/uiStore";
 import { useCurrencyStore } from "../../state/currencyStore";
 import { PillButton } from "../../components/ui/Button";
+import { StatPill } from "../../components/ui/StatPill";
+import { Page } from "../../components/layout/Page";
 import { formatMoney } from "../../lib/format";
 import { buildingById } from "../../data/buildings";
 import { PropertyCard } from "./PropertyCard";
@@ -17,16 +19,15 @@ export function RealEstate() {
   const portfolioValue = owned.reduce((sum, a) => sum + (buildingMarketValues[a.buildingId] ?? 0), 0);
 
   return (
-    <div className="mx-auto max-w-3xl px-10 py-10">
-      <div className="mb-6 flex items-start justify-between gap-4">
+    <Page>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-[28px] font-extrabold tracking-tight text-ink">Real Estate</h1>
           <p className="mt-1 text-[14px] text-ink-faint">Your owned buildings, as investments</p>
         </div>
-        <span className="flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5 text-[13px] font-bold text-brand-600">
-          <Landmark size={15} strokeWidth={2.5} />
-          {formatMoney(portfolioValue, { currency })} portfolio
-        </span>
+        <StatPill icon={Landmark}>
+          {owned.length > 0 ? `${formatMoney(portfolioValue, { currency })} portfolio` : "No properties yet"}
+        </StatPill>
       </div>
 
       {owned.length === 0 ? (
@@ -48,6 +49,6 @@ export function RealEstate() {
           })}
         </div>
       )}
-    </div>
+    </Page>
   );
 }

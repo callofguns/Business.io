@@ -2,6 +2,8 @@ import { Receipt, Percent, CalendarClock, Landmark } from "lucide-react";
 import { Card, SectionHeading } from "../../components/ui/Card";
 import { StatCard } from "../../components/ui/StatCard";
 import { PillButton } from "../../components/ui/Button";
+import { StatPill } from "../../components/ui/StatPill";
+import { Page } from "../../components/layout/Page";
 import { useGameStore } from "../../state/gameStore";
 import { useCurrencyStore } from "../../state/currencyStore";
 import { formatMoney } from "../../lib/format";
@@ -19,22 +21,20 @@ export function TaxOffice() {
   const roundedAccrued = Math.round(taxAccrued);
   const daysUntilDue = Math.max(0, TAX_PERIOD_DAYS - (day - lastTaxPaymentDay));
   const totalPaid = taxHistory.reduce((sum, entry) => sum + entry.amount, 0);
-  const canPayNow = roundedAccrued > 0 && bankBalance >= roundedAccrued;
+  const canAffordNow = bankBalance >= roundedAccrued;
+  const canPayNow = roundedAccrued > 0 && canAffordNow;
 
   return (
-    <div className="mx-auto max-w-3xl px-10 py-10">
-      <div className="mb-6 flex items-start justify-between gap-4">
+    <Page>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-[28px] font-extrabold tracking-tight text-ink">Tax Office</h1>
           <p className="mt-1 text-[14px] text-ink-faint">Taxes on your business profits</p>
         </div>
-        <span className="flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5 text-[13px] font-bold text-brand-600">
-          <Percent size={15} strokeWidth={2.5} />
-          {Math.round(TAX_RATE * 100)}% flat rate
-        </span>
+        <StatPill icon={Percent}>{Math.round(TAX_RATE * 100)}% flat rate</StatPill>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <StatCard icon={Receipt} tone="bad" label="Accrued balance" value={formatMoney(roundedAccrued, { currency })} />
         <StatCard
           icon={CalendarClock}
@@ -56,7 +56,9 @@ export function TaxOffice() {
             <p className="text-[13px] font-bold text-ink">{formatMoney(roundedAccrued, { currency })} owed</p>
             <p className="text-[12px] text-ink-faint">
               {roundedAccrued > 0
-                ? `Automatically filed in ${daysUntilDue === 0 ? "today" : `${daysUntilDue} day${daysUntilDue === 1 ? "" : "s"}`}, or pay early below.`
+                ? canAffordNow
+                  ? `Automatically filed in ${daysUntilDue === 0 ? "today" : `${daysUntilDue} day${daysUntilDue === 1 ? "" : "s"}`}, or pay early below.`
+                  : "Not enough funds to pay early right now — it will still file automatically when due."
                 : "Nothing owed right now."}
             </p>
           </div>
@@ -69,7 +71,12 @@ export function TaxOffice() {
       <Card className="mt-4">
         <SectionHeading icon={Landmark} title="Payment history" subtitle="Most recent filings" />
         {taxHistory.length === 0 ? (
-          <p className="text-[12.5px] text-ink-faint">No taxes filed yet.</p>
+          <div className="rounded-2xl border border-dashed border-border-strong px-4 py-8 text-center">
+            <p className="text-[13.5px] font-semibold text-ink">No taxes filed yet</p>
+            <p className="mt-1 text-[12px] text-ink-faint">
+              Your first filing lands automatically {TAX_PERIOD_DAYS} days after founding your company.
+            </p>
+          </div>
         ) : (
           <ul className="flex flex-col divide-y divide-border">
             {taxHistory.map((entry, i) => (
@@ -83,6 +90,6 @@ export function TaxOffice() {
           </ul>
         )}
       </Card>
-    </div>
+    </Page>
   );
 }

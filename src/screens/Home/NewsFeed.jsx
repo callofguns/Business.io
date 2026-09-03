@@ -46,8 +46,17 @@ function relativeDayLabel(entryDay, currentDay) {
 const itemTransition = { type: "spring", stiffness: 560, damping: 36, mass: 0.45 };
 
 export function NewsFeed({ entries, currentDay }) {
+  if (entries.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-1 py-10 text-center">
+        <p className="text-[13.5px] font-semibold text-ink">No news yet</p>
+        <p className="text-[12.5px] text-ink-faint">Advance a day to see updates here.</p>
+      </div>
+    );
+  }
+
   return (
-    <ul className="flex flex-col divide-y divide-border">
+    <ul aria-live="polite" className="flex flex-col divide-y divide-border">
       <AnimatePresence initial={false}>
         {entries.map((entry) => {
           const Icon = ICONS[entry.icon] ?? Newspaper;

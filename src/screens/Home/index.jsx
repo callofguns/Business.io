@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { ArrowRight, Wallet, Newspaper } from "lucide-react";
+import { ArrowRight, Wallet, Newspaper, ShoppingBag } from "lucide-react";
 import { useGameStore } from "../../state/gameStore";
 import { useAuthStore } from "../../state/authStore";
+import { useUiStore } from "../../state/uiStore";
 import { Card, SectionHeading } from "../../components/ui/Card";
 import { PillButton } from "../../components/ui/Button";
 import { AnimatedMoney } from "../../components/ui/AnimatedMoney";
+import { Page } from "../../components/layout/Page";
 import { WeekdayStrip } from "./WeekdayStrip";
 import { NewsFeed } from "./NewsFeed";
 import { DaySummaryModal } from "./DaySummaryModal";
@@ -14,7 +16,9 @@ export function Home() {
   const playerName = useAuthStore((s) => s.playerName);
   const bankBalance = useGameStore((s) => s.bankBalance);
   const news = useGameStore((s) => s.news);
+  const businessCount = useGameStore((s) => s.businesses.length);
   const nextDay = useGameStore((s) => s.nextDay);
+  const setScreen = useUiStore((s) => s.setScreen);
   const [summaryOpen, setSummaryOpen] = useState(false);
 
   const handleNextDay = () => {
@@ -23,8 +27,8 @@ export function Home() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl px-10 py-10">
-      <div className="mb-8 flex items-end justify-between">
+    <Page maxWidth="5xl">
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-[15px] font-medium text-ink-faint">Welcome,</p>
           <h1 className="text-[28px] font-extrabold tracking-tight text-ink">{playerName}</h1>
@@ -35,7 +39,26 @@ export function Home() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[380px_1fr] lg:items-start">
+      {businessCount === 0 ? (
+        <Card className="mb-6 flex flex-wrap items-center justify-between gap-3 border-dashed">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
+              <ShoppingBag size={18} strokeWidth={2.25} />
+            </span>
+            <div>
+              <p className="text-[14px] font-bold text-ink">You don't own any businesses yet</p>
+              <p className="text-[12.5px] text-ink-faint">
+                Lease or buy a building in the Marketplace to open your first one.
+              </p>
+            </div>
+          </div>
+          <PillButton size="sm" onClick={() => setScreen("marketplace")}>
+            Open Marketplace
+          </PillButton>
+        </Card>
+      ) : null}
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[380px_1fr] xl:items-start">
         <div className="flex flex-col gap-6">
           <Card>
             <PillButton
@@ -65,7 +88,7 @@ export function Home() {
           </Card>
         </div>
 
-        <Card className="lg:min-h-[520px]">
+        <Card className="xl:min-h-[520px]">
           <SectionHeading
             icon={Newspaper}
             iconTone="warn"
@@ -79,6 +102,6 @@ export function Home() {
       </div>
 
       <DaySummaryModal open={summaryOpen} onClose={() => setSummaryOpen(false)} />
-    </div>
+    </Page>
   );
 }

@@ -3,6 +3,8 @@ import { Trophy } from "lucide-react";
 import clsx from "clsx";
 import { Card, SectionHeading } from "../../components/ui/Card";
 import { Badge } from "../../components/ui/Badge";
+import { StatPill } from "../../components/ui/StatPill";
+import { Page } from "../../components/layout/Page";
 import { useGameStore } from "../../state/gameStore";
 import { useCurrencyStore } from "../../state/currencyStore";
 import { formatMoney } from "../../lib/format";
@@ -53,16 +55,15 @@ export function Rivals() {
   const playerRank = leaderboard.findIndex((e) => e.isPlayer) + 1;
 
   return (
-    <div className="mx-auto max-w-3xl px-10 py-10">
-      <div className="mb-6 flex items-start justify-between gap-4">
+    <Page>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-[28px] font-extrabold tracking-tight text-ink">Rivals</h1>
           <p className="mt-1 text-[14px] text-ink-faint">See how your empire stacks up, ranked by net worth</p>
         </div>
-        <span className="flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5 text-[13px] font-bold text-brand-600">
-          <Trophy size={15} strokeWidth={2.5} />
+        <StatPill icon={Trophy}>
           #{playerRank} of {leaderboard.length}
-        </span>
+        </StatPill>
       </div>
 
       <Card>
@@ -97,6 +98,6 @@ export function Rivals() {
           })}
         </ul>
       </Card>
-    </div>
+    </Page>
   );
 }

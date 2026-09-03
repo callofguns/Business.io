@@ -55,11 +55,11 @@ export function PropertyCard({ building }) {
         </p>
       </div>
 
-      <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
         {occupant ? (
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <BusinessTypeIcon type={occupant.type} sizeClass="h-6 w-6 rounded-md" iconSize={13} />
-            <p className="text-[12.5px] font-semibold text-ink">Occupied by {occupant.name}</p>
+            <p className="truncate text-[12.5px] font-semibold text-ink">Occupied by {occupant.name}</p>
           </div>
         ) : (
           <IconRow icon={Banknote} iconClassName="text-good-500">
@@ -70,6 +70,7 @@ export function PropertyCard({ building }) {
           size="sm"
           variant="outline"
           disabled={!canSell}
+          title={canSell ? undefined : "Can't sell while a business is running here"}
           onClick={() => sellBuilding({ buildingId: building.id })}
         >
           Sell

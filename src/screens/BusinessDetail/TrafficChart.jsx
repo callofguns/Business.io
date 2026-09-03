@@ -31,10 +31,17 @@ export function TrafficChart({ history }) {
   const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
   const areaPath = `${linePath} L ${points[points.length - 1].x} ${HEIGHT - PADDING} L ${points[0].x} ${HEIGHT - PADDING} Z`;
   const last = points[points.length - 1];
+  const chartLabel = `Daily visitor traffic from day ${history[0].day} to day ${last.day}, ranging from ${min} to ${max}, most recently ${last.visitors}`;
 
   return (
     <div className="rounded-2xl border border-border bg-surface-sunken p-3">
-      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="h-[160px] w-full" preserveAspectRatio="none">
+      <svg
+        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+        className="h-[160px] w-full"
+        preserveAspectRatio="none"
+        role="img"
+        aria-label={chartLabel}
+      >
         <defs>
           <linearGradient id="traffic-fill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--color-brand-500)" stopOpacity="0.22" />

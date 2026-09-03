@@ -106,9 +106,6 @@ const INITIAL_STATE = {
   // is never stored -- it's always computed fresh via computeNetWorth from
   // the state slices that already exist for each asset class.
   rivalNetWorths: seedRivalNetWorths(),
-  // Placeholders for future stages — kept here now so later work only adds
-  // reducers/screens, it doesn't need to reshape the store.
-  employees: [],
   news: [
     makeNewsEntry({
       icon: "briefcase",

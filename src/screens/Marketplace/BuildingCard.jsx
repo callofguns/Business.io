@@ -54,7 +54,7 @@ export function BuildingCard({ building, view, onAcquire }) {
           <IconRow icon={Landmark}>{formatMoney(marketValue, { currency })} to buy</IconRow>
         </div>
 
-        <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
           {view === "market" ? (
             acquisition ? (
               <p className="text-[12.5px] font-medium text-ink-faint">

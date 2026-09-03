@@ -84,6 +84,7 @@ export function StartBusinessModal({ open, onClose }) {
                 key={option.type}
                 type="button"
                 disabled={!affordable}
+                title={affordable ? undefined : "Not enough funds"}
                 onClick={() => setSelectedType(option.type)}
                 className={clsx(
                   "flex items-center gap-3 rounded-2xl border border-border-strong bg-surface px-4 py-3 text-left transition-colors",
