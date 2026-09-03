@@ -18,7 +18,7 @@ export function Login() {
   };
 
   return (
-    <div className="flex h-screen w-full items-center justify-center bg-surface-sunken px-6">
+    <div className="flex h-[100dvh] w-full items-center justify-center bg-surface-sunken px-6">
       <motion.div
         initial={{ opacity: 0, y: 18, scale: 0.96 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -27,7 +27,7 @@ export function Login() {
       >
         <Card className="text-center">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-500 text-2xl">
-            🏙️
+            <span aria-hidden="true">🏙️</span>
           </div>
           <h1 className="text-[22px] font-extrabold tracking-tight text-ink">business.io</h1>
           <p className="mt-1 text-[14px] text-ink-faint">
@@ -35,7 +35,11 @@ export function Login() {
           </p>
 
           <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-3">
+            <label htmlFor="player-name" className="sr-only">
+              Your name
+            </label>
             <input
+              id="player-name"
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -48,6 +52,7 @@ export function Login() {
               icon={ArrowRight}
               size="lg"
               disabled={!canSubmit}
+              title={canSubmit ? undefined : "Enter a name to continue"}
               className="w-full"
             >
               Get Started

@@ -4,7 +4,7 @@ export function Card({ children, className, ...props }) {
   return (
     <div
       className={clsx(
-        "rounded-card border border-border bg-surface p-5 shadow-[0_1px_2px_rgba(16,19,26,0.04)]",
+        "rounded-card border border-border bg-surface p-4 shadow-[0_1px_2px_rgba(16,19,26,0.04)] sm:p-5",
         className
       )}
       {...props}
@@ -24,8 +24,8 @@ export function SectionHeading({ icon: Icon, iconTone = "brand", title, subtitle
   };
 
   return (
-    <div className="mb-3 flex items-center justify-between gap-3">
-      <div className="flex items-center gap-3">
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+      <div className="flex min-w-0 items-center gap-3">
         {Icon ? (
           <span
             className={clsx(
@@ -36,7 +36,7 @@ export function SectionHeading({ icon: Icon, iconTone = "brand", title, subtitle
             <Icon size={18} strokeWidth={2.25} />
           </span>
         ) : null}
-        <div>
+        <div className="min-w-0">
           <h2 className="text-[17px] font-bold leading-tight text-ink">{title}</h2>
           {subtitle ? <p className="text-[13px] text-ink-faint">{subtitle}</p> : null}
         </div>

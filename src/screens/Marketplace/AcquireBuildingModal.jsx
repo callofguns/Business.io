@@ -46,6 +46,7 @@ export function AcquireBuildingModal({ building, onClose }) {
   const marketValue = buildingMarketValues[displayBuilding.id] ?? displayBuilding.buyPrice;
   const canRent = bankBalance >= displayBuilding.rentDeposit;
   const canBuy = bankBalance >= marketValue;
+  const neitherAffordable = !canRent && !canBuy;
   const cost = mode === "own" ? marketValue : mode === "rent" ? displayBuilding.rentDeposit : null;
   const canConfirm = mode !== null && bankBalance >= cost;
 
@@ -72,6 +73,7 @@ export function AcquireBuildingModal({ building, onClose }) {
           <button
             type="button"
             disabled={!canRent}
+            aria-pressed={mode === "rent"}
             onClick={() => setMode("rent")}
             className={clsx(
               "flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition-colors",
@@ -96,6 +98,7 @@ export function AcquireBuildingModal({ building, onClose }) {
           <button
             type="button"
             disabled={!canBuy}
+            aria-pressed={mode === "own"}
             onClick={() => setMode("own")}
             className={clsx(
               "flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition-colors",
@@ -116,7 +119,11 @@ export function AcquireBuildingModal({ building, onClose }) {
           </button>
         </div>
 
-        {mode && !canConfirm ? (
+        {neitherAffordable ? (
+          <p className="text-[12px] font-medium text-bad-600">
+            Not enough funds to rent or buy this building right now.
+          </p>
+        ) : mode && !canConfirm ? (
           <p className="text-[12px] font-medium text-bad-600">
             Not enough funds — you need {formatMoney(cost, { currency })}.
           </p>

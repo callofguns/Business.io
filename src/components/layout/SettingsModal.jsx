@@ -1,15 +1,17 @@
 import clsx from "clsx";
-import { History } from "lucide-react";
+import { History, Sparkles } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { ThemeToggle } from "../ui/ThemeToggle";
 import { PillButton } from "../ui/Button";
 import { useCurrencyStore } from "../../state/currencyStore";
+import { useOnboardingStore } from "../../state/onboardingStore";
 import { CURRENCY_LIST } from "../../data/currencies";
 import { APP_VERSION } from "../../data/changelog";
 
 export function SettingsModal({ open, onClose, onOpenChangelog }) {
   const currency = useCurrencyStore((s) => s.currency);
   const setCurrency = useCurrencyStore((s) => s.setCurrency);
+  const replayIntro = useOnboardingStore((s) => s.replayIntro);
 
   return (
     <Modal open={open} onClose={onClose} title="Settings" className="max-w-sm">
@@ -32,6 +34,7 @@ export function SettingsModal({ open, onClose, onOpenChangelog }) {
                 <button
                   key={c.code}
                   type="button"
+                  aria-pressed={active}
                   onClick={() => setCurrency(c.code)}
                   className={clsx(
                     "flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left transition-colors",
@@ -75,6 +78,17 @@ export function SettingsModal({ open, onClose, onOpenChangelog }) {
               Update Log
             </PillButton>
           </div>
+          <button
+            type="button"
+            onClick={() => {
+              replayIntro();
+              onClose();
+            }}
+            className="mt-2 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[13px] font-semibold text-brand-600 hover:bg-brand-50"
+          >
+            <Sparkles size={15} strokeWidth={2.5} />
+            Replay intro
+          </button>
         </section>
       </div>
     </Modal>

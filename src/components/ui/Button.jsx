@@ -33,7 +33,7 @@ export function PillButton({
       transition={press}
       disabled={disabled}
       className={clsx(
-        "inline-flex items-center justify-center gap-2 rounded-full font-semibold tracking-tight transition-colors",
+        "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full font-semibold tracking-tight transition-colors",
         "disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none",
         VARIANTS[variant],
         SIZES[size],

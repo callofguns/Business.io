@@ -2,6 +2,8 @@ import { Users } from "lucide-react";
 import { useGameStore } from "../../state/gameStore";
 import { useUiStore } from "../../state/uiStore";
 import { PillButton } from "../../components/ui/Button";
+import { StatPill } from "../../components/ui/StatPill";
+import { Page } from "../../components/layout/Page";
 import { StaffCard } from "./StaffCard";
 
 export function Hiring() {
@@ -11,18 +13,15 @@ export function Hiring() {
   const totalStaff = businesses.reduce((sum, b) => sum + (b.staffCount ?? 0), 0);
 
   return (
-    <div className="mx-auto max-w-3xl px-10 py-10">
-      <div className="mb-6 flex items-start justify-between gap-4">
+    <Page>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-[28px] font-extrabold tracking-tight text-ink">Hiring</h1>
           <p className="mt-1 text-[14px] text-ink-faint">
             Hire staff to grow how many customers each business can serve
           </p>
         </div>
-        <span className="flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5 text-[13px] font-bold text-brand-600">
-          <Users size={15} strokeWidth={2.5} />
-          {totalStaff}
-        </span>
+        <StatPill icon={Users}>{totalStaff}</StatPill>
       </div>
 
       {businesses.length === 0 ? (
@@ -42,6 +41,6 @@ export function Hiring() {
           ))}
         </div>
       )}
-    </div>
+    </Page>
   );
 }

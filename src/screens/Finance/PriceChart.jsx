@@ -38,10 +38,17 @@ export function PriceChart({ history, tone = "neutral" }) {
   const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
   const color = TONE_COLORS[tone] ?? TONE_COLORS.neutral;
   const last = points[points.length - 1];
+  const chartLabel = `Price history over the last ${history.length} days, ranging from ${min.toFixed(2)} to ${max.toFixed(2)}, currently ${last.price.toFixed(2)}`;
 
   return (
     <div className="rounded-2xl border border-border bg-surface-sunken p-2">
-      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="h-[80px] w-full" preserveAspectRatio="none">
+      <svg
+        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+        className="h-[80px] w-full"
+        preserveAspectRatio="none"
+        role="img"
+        aria-label={chartLabel}
+      >
         <path
           d={linePath}
           fill="none"

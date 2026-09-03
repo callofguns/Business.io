@@ -49,7 +49,8 @@ function ProductRow({ business, product, productPrices, currency, onSetPrice }) 
             onKeyDown={(e) => {
               if (e.key === "Enter") e.currentTarget.blur();
             }}
-            className="h-full w-16 bg-transparent px-1 text-right text-[13px] font-semibold text-ink focus:outline-none"
+            aria-label={`Price for ${product.name}`}
+            className="h-full w-16 bg-transparent px-1 text-right text-[13px] font-semibold text-ink"
           />
         </div>
         {isCustom ? (
@@ -106,20 +107,24 @@ export function ProductsModal({ business, onClose }) {
           </p>
         </div>
 
-        <div className="flex flex-col gap-2.5">
-          {products.map((product) => (
-            <ProductRow
-              key={product.id}
-              business={liveBusiness}
-              product={product}
-              productPrices={productPrices}
-              currency={currency}
-              onSetPrice={(productId, price) =>
-                setProductPrice({ businessId: liveBusiness.id, productId, price })
-              }
-            />
-          ))}
-        </div>
+        {products.length === 0 ? (
+          <p className="text-center text-[12.5px] text-ink-faint">This business has no products to price.</p>
+        ) : (
+          <div className="flex flex-col gap-2.5">
+            {products.map((product) => (
+              <ProductRow
+                key={product.id}
+                business={liveBusiness}
+                product={product}
+                productPrices={productPrices}
+                currency={currency}
+                onSetPrice={(productId, price) =>
+                  setProductPrice({ businessId: liveBusiness.id, productId, price })
+                }
+              />
+            ))}
+          </div>
+        )}
 
         <PillButton onClick={onClose} size="lg" className="w-full">
           Done

@@ -6,11 +6,11 @@ export function WeekdayStrip({ day }) {
   const activeIndex = weekdayIndex(day);
 
   return (
-    <div className="flex items-center justify-center gap-2.5">
+    <div className="flex items-center justify-center gap-1.5 sm:gap-2.5">
       {WEEKDAY_LABELS.map((label, i) => {
         const active = i === activeIndex;
         return (
-          <div key={i} className="relative flex h-9 w-9 items-center justify-center">
+          <div key={i} className="relative flex h-8 w-8 items-center justify-center sm:h-9 sm:w-9">
             {active ? (
               <motion.div
                 layoutId="weekday-highlight"
