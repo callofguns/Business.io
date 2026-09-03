@@ -4,9 +4,21 @@
 // mirror the actual GitHub release notes at
 // https://github.com/callofguns/Business.io/releases -- only released
 // versions belong here, nothing still sitting on `dev` unreleased.
-export const APP_VERSION = "v0.2.7-beta";
+export const APP_VERSION = "v0.3.0-beta";
 
 export const CHANGELOG = [
+  {
+    version: "v0.3.0-beta",
+    date: "2026-09-03",
+    title: "Stage 10: Polish",
+    notes: [
+      "Mobile support — a bottom tab bar and \"More\" sheet now replace the sidebar on phones, fixing a layout that was previously unusable below desktop width",
+      "Accessibility pass — visible focus rings app-wide, a real focus trap in dialogs, labelled form fields, and screen-reader-friendly state on toggles, charts, and the news feed",
+      "A short welcome guide walks new players through the core loop on first login, replayable anytime from Settings",
+      "Cleaned up empty states and stale copy across Marketplace, Tax Office, Finance, and the sidebar",
+      "No gameplay or economy changes — this is a quality/interface release",
+    ],
+  },
   {
     version: "v0.2.7-beta",
     date: "2026-09-02",
