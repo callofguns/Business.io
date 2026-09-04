@@ -12,7 +12,10 @@ export function Sidebar({ current, onNavigate, onOpenSettings }) {
   const initial = playerName ? playerName.trim().charAt(0).toUpperCase() : "?";
 
   return (
-    <aside className="hidden h-full w-64 shrink-0 flex-col border-r border-border bg-surface px-4 py-6 md:flex">
+    // Sticky, not height-locked by a flex-parent -- see the comment in
+    // AppShell.jsx. It carries its own h-[100dvh] so "sticky to the
+    // viewport while the page scrolls" has a well-defined height to pin.
+    <aside className="hidden w-64 shrink-0 flex-col border-r border-border bg-surface px-4 py-6 md:flex md:sticky md:top-0 md:h-[100dvh]">
       <div className="mb-6 flex items-center gap-2.5 px-2">
         <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-500 text-lg">
           <span aria-hidden="true">🏙️</span>

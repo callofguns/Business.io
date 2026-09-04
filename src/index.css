@@ -76,17 +76,16 @@
   --color-bad-600: #ff6b6b;
 }
 
-html,
-body,
-#root {
-  height: 100%;
-}
-
+/* The page/document itself is the one scroll container (see AppShell.jsx's
+   comment) -- no fixed height here, and overscroll-behavior keeps iOS's
+   rubber-band bounce from feeling like it's dragging the whole app around. */
 body {
   background: var(--color-surface-sunken);
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
 }
 
 * {
@@ -127,14 +126,20 @@ body {
   }
 }
 
-/* thin, unobtrusive scrollbar for the app shell */
+/* thin, unobtrusive scrollbar -- applied to the document itself (the only
+   page-level scroll container now, see AppShell.jsx) and to `.app-scroll`,
+   still used by a couple of small internal scroll regions like the news
+   feed card. */
+html::-webkit-scrollbar,
 .app-scroll::-webkit-scrollbar {
   width: 10px;
 }
+html::-webkit-scrollbar-thumb,
 .app-scroll::-webkit-scrollbar-thumb {
   background: var(--color-border-strong);
   border-radius: 999px;
 }
+html::-webkit-scrollbar-track,
 .app-scroll::-webkit-scrollbar-track {
   background: transparent;
 }

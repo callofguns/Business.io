@@ -23,11 +23,20 @@ export function AppShell({ screen, onNavigate, children }) {
   };
 
   return (
-    <div className="flex h-[100dvh] w-full overflow-hidden bg-surface-sunken">
+    // Deliberately NOT height-locked (no h-[100dvh]) with an inner
+    // overflow-y-auto scroller -- that nested-scroll-inside-a-dvh-parent
+    // pattern is what caused the reported iOS bug: Safari recalculates
+    // 100dvh as its toolbar hides/shows *during* a scroll gesture, which
+    // resizes this outer container mid-scroll and snaps the inner
+    // scroller's position back. Letting the document/body itself scroll
+    // (the sidebar goes sticky, the tab bar stays fixed) sidesteps the
+    // whole class of bug -- there's only one scroll container, and it's
+    // the one iOS already knows how to resize correctly.
+    <div className="flex w-full bg-surface-sunken">
       {/* Visually hidden until focused — first Tab stop for keyboard users. */}
       <a
         href="#main-content"
-        className="fixed left-4 top-4 z-[60] -translate-y-16 rounded-xl bg-brand-500 px-4 py-2 text-[13px] font-semibold text-white transition-transform focus-visible:translate-y-0"
+        className="fixed left-4 top-[calc(env(safe-area-inset-top)+1rem)] z-[60] -translate-y-20 rounded-xl bg-brand-500 px-4 py-2 text-[13px] font-semibold text-white transition-transform focus-visible:translate-y-0"
       >
         Skip to content
       </a>
@@ -37,7 +46,7 @@ export function AppShell({ screen, onNavigate, children }) {
       <main
         id="main-content"
         tabIndex={-1}
-        className="app-scroll min-w-0 flex-1 overflow-y-auto pb-20 md:pb-0"
+        className="min-w-0 flex-1 pt-[env(safe-area-inset-top)] pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0"
       >
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
