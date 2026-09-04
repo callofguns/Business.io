@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { Card } from "../../components/ui/Card";
 import { Badge } from "../../components/ui/Badge";
 import { PillButton } from "../../components/ui/Button";
+import { AmountInput } from "../../components/ui/AmountInput";
 import { useGameStore } from "../../state/gameStore";
 import { useCurrencyStore } from "../../state/currencyStore";
 import { formatMoney, formatSigned } from "../../lib/format";
@@ -75,18 +76,14 @@ export function StockCard({ stock }) {
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
-        <div className="flex h-9 items-center rounded-xl border border-border-strong bg-surface px-2.5">
-          <input
-            type="number"
-            min="1"
-            step="1"
-            value={sharesInput}
-            onChange={(e) => setSharesInput(e.target.value)}
-            aria-label={`Shares of ${stock.name}`}
-            className="h-full w-14 bg-transparent text-right text-[13px] font-semibold text-ink"
-          />
-          <span className="ml-1 text-[12px] text-ink-faint">sh</span>
-        </div>
+        <AmountInput
+          value={sharesInput}
+          onChange={(e) => setSharesInput(e.target.value)}
+          ariaLabel={`Shares of ${stock.name}`}
+          suffix="sh"
+          min="1"
+          inputClassName="w-14"
+        />
         <div className="flex items-center gap-2">
           <PillButton
             size="sm"

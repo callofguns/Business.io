@@ -4,6 +4,8 @@ import { Card, SectionHeading } from "../../components/ui/Card";
 import { StatCard } from "../../components/ui/StatCard";
 import { PillButton } from "../../components/ui/Button";
 import { StatPill } from "../../components/ui/StatPill";
+import { EmptyState } from "../../components/ui/EmptyState";
+import { AmountInput } from "../../components/ui/AmountInput";
 import { Page } from "../../components/layout/Page";
 import { useGameStore } from "../../state/gameStore";
 import { useCurrencyStore } from "../../state/currencyStore";
@@ -27,19 +29,14 @@ export function Loans() {
           <h1 className="text-[28px] font-extrabold tracking-tight text-ink">Loans</h1>
           <p className="mt-1 text-[14px] text-ink-faint">Borrow against a revolving line of credit</p>
         </div>
-        <div className="rounded-card border border-dashed border-border-strong bg-surface px-6 py-14 text-center">
-          <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
-            <CreditCard size={22} strokeWidth={2.25} />
-          </span>
-          <p className="text-[15px] font-semibold text-ink">{LOAN_PRODUCT.name}</p>
-          <p className="mx-auto mt-1 max-w-xs text-[13px] text-ink-faint">
-            Up to {formatMoney(LOAN_PRODUCT.limit, { currency })} available on demand, at{" "}
-            {Math.round(LOAN_PRODUCT.apr * 100)}% APR on whatever you draw. Free to open.
-          </p>
-          <PillButton size="sm" className="mt-4" onClick={openCreditLine}>
-            Open Line of Credit
-          </PillButton>
-        </div>
+        <EmptyState
+          icon={CreditCard}
+          title={LOAN_PRODUCT.name}
+          action={{ label: "Open Line of Credit", onClick: openCreditLine }}
+        >
+          Up to {formatMoney(LOAN_PRODUCT.limit, { currency })} available on demand, at{" "}
+          {Math.round(LOAN_PRODUCT.apr * 100)}% APR on whatever you draw. Free to open.
+        </EmptyState>
       </Page>
     );
   }
@@ -103,19 +100,15 @@ export function Loans() {
               <label htmlFor="borrow-amount" className="mb-1 block text-[12px] font-semibold text-ink-soft">
                 Borrow
               </label>
-              <div className="flex h-9 w-32 items-center rounded-xl border border-border-strong bg-surface px-2.5">
-                <span className="text-[13px] text-ink-faint">$</span>
-                <input
-                  id="borrow-amount"
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={borrowInput}
-                  onChange={(e) => setBorrowInput(e.target.value)}
-                  placeholder="0"
-                  className="h-full w-full bg-transparent px-1 text-right text-[13px] font-semibold text-ink"
-                />
-              </div>
+              <AmountInput
+                id="borrow-amount"
+                value={borrowInput}
+                onChange={(e) => setBorrowInput(e.target.value)}
+                prefix="$"
+                placeholder="0"
+                className="w-32"
+                inputClassName="w-full"
+              />
             </div>
             <PillButton
               size="sm"
@@ -133,19 +126,15 @@ export function Loans() {
               <label htmlFor="repay-amount" className="mb-1 block text-[12px] font-semibold text-ink-soft">
                 Repay
               </label>
-              <div className="flex h-9 w-32 items-center rounded-xl border border-border-strong bg-surface px-2.5">
-                <span className="text-[13px] text-ink-faint">$</span>
-                <input
-                  id="repay-amount"
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={repayInput}
-                  onChange={(e) => setRepayInput(e.target.value)}
-                  placeholder="0"
-                  className="h-full w-full bg-transparent px-1 text-right text-[13px] font-semibold text-ink"
-                />
-              </div>
+              <AmountInput
+                id="repay-amount"
+                value={repayInput}
+                onChange={(e) => setRepayInput(e.target.value)}
+                prefix="$"
+                placeholder="0"
+                className="w-32"
+                inputClassName="w-full"
+              />
             </div>
             <PillButton
               size="sm"

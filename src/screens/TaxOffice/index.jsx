@@ -3,6 +3,7 @@ import { Card, SectionHeading } from "../../components/ui/Card";
 import { StatCard } from "../../components/ui/StatCard";
 import { PillButton } from "../../components/ui/Button";
 import { StatPill } from "../../components/ui/StatPill";
+import { EmptyState } from "../../components/ui/EmptyState";
 import { Page } from "../../components/layout/Page";
 import { useGameStore } from "../../state/gameStore";
 import { useCurrencyStore } from "../../state/currencyStore";
@@ -71,12 +72,9 @@ export function TaxOffice() {
       <Card className="mt-4">
         <SectionHeading icon={Landmark} title="Payment history" subtitle="Most recent filings" />
         {taxHistory.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-border-strong px-4 py-8 text-center">
-            <p className="text-[13.5px] font-semibold text-ink">No taxes filed yet</p>
-            <p className="mt-1 text-[12px] text-ink-faint">
-              Your first filing lands automatically {TAX_PERIOD_DAYS} days after founding your company.
-            </p>
-          </div>
+          <EmptyState size="card" title="No taxes filed yet">
+            Your first filing lands automatically {TAX_PERIOD_DAYS} days after founding your company.
+          </EmptyState>
         ) : (
           <ul className="flex flex-col divide-y divide-border">
             {taxHistory.map((entry, i) => (

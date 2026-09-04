@@ -3,6 +3,7 @@ import { ArrowLeft, Activity, Gauge } from "lucide-react";
 import clsx from "clsx";
 import { Modal } from "../../components/ui/Modal";
 import { PillButton } from "../../components/ui/Button";
+import { EmptyState } from "../../components/ui/EmptyState";
 import { BusinessTypeIcon } from "../../components/ui/BusinessTypeIcon";
 import { BuildingTypeIcon } from "../../components/ui/BuildingTypeIcon";
 import { IconRow } from "../../components/ui/IconRow";
@@ -122,23 +123,13 @@ export function StartBusinessModal({ open, onClose }) {
           </button>
 
           {vacantBuildings.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-border-strong px-4 py-6 text-center">
-              <p className="text-[14px] font-semibold text-ink">
-                You don't own or lease any {selectedOption.buildingType} space yet.
-              </p>
-              <p className="mt-1 text-[12.5px] text-ink-faint">
-                Acquire a building in the Marketplace first, then come back to start this
-                business.
-              </p>
-              <PillButton
-                variant="outline"
-                size="sm"
-                className="mt-3"
-                onClick={handleOpenMarketplace}
-              >
-                Open Marketplace
-              </PillButton>
-            </div>
+            <EmptyState
+              size="modal"
+              title={`You don't own or lease any ${selectedOption.buildingType} space yet.`}
+              action={{ label: "Open Marketplace", variant: "outline", onClick: handleOpenMarketplace }}
+            >
+              Acquire a building in the Marketplace first, then come back to start this business.
+            </EmptyState>
           ) : (
             <div className="flex flex-col gap-2.5">
               {vacantBuildings.map((building) => {
