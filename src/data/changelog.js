@@ -4,9 +4,18 @@
 // mirror the actual GitHub release notes at
 // https://github.com/callofguns/Business.io/releases -- only released
 // versions belong here, nothing still sitting on `dev` unreleased.
-export const APP_VERSION = "v0.3.2-beta";
+export const APP_VERSION = "v0.3.3-beta";
 
 export const CHANGELOG = [
+  {
+    version: "v0.3.3-beta",
+    date: "2026-09-04",
+    title: "Internal cleanup",
+    notes: [
+      "Consolidated a few repeated UI patterns (empty-state placeholders and amount inputs) into shared components behind the scenes",
+      "No visible changes to how anything looks or plays",
+    ],
+  },
   {
     version: "v0.3.2-beta",
     date: "2026-09-04",
