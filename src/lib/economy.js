@@ -466,6 +466,36 @@ export function totalPassiveRentalIncome(acquiredBuildings, businesses) {
   }, 0);
 }
 
+// --- Line of credit ---------------------------------------------------
+//
+// A single revolving line the player can open once (gameStore.openCreditLine),
+// then borrow from / repay freely up to its limit (LOAN_PRODUCT in
+// data/loanProduct.js). Interest accrues daily on the outstanding balance;
+// nextDay() attempts to pay that day's interest out of bankBalance the same
+// way tax auto-payment does, but unlike tax it's a per-day amount, not a
+// periodic lump sum, and a missed payment doesn't force the balance down --
+// it capitalizes (adds to the balance) instead, so unpaid debt compounds.
+export function creditLineInterest(creditLine) {
+  if (!creditLine) return 0;
+  return creditLine.balance * creditLine.dailyRate;
+}
+
+// One day's payment attempt. Returns { balance, interestCharged,
+// paidFromBank, missed } -- paidFromBank is what nextDay() should actually
+// deduct from bankBalance (0 when missed, since the interest capitalized
+// into the balance instead of leaving the bank).
+export function rollCreditLinePayment(creditLine, bankBalance) {
+  if (!creditLine) return { balance: 0, interestCharged: 0, paidFromBank: 0, missed: false };
+  const interest = creditLineInterest(creditLine);
+  const canPay = bankBalance >= interest;
+  return {
+    balance: canPay ? creditLine.balance : creditLine.balance + interest,
+    interestCharged: interest,
+    paidFromBank: canPay ? interest : 0,
+    missed: !canPay,
+  };
+}
+
 // --- Net worth (Stage 9: Rivals) -----------------------------------------
 //
 // One combined figure summing every asset class the player can hold, used
@@ -517,12 +547,14 @@ export function computeNetWorth({
   stockPrices,
   acquiredBuildings,
   buildingMarketValues,
+  creditLineBalance = 0,
 }) {
   return (
     bankBalance +
     stockPortfolioValue(stockHoldings, stockPrices) +
     realEstatePortfolioValue(acquiredBuildings, buildingMarketValues) +
-    businessesValuation(businesses, productPrices, day)
+    businessesValuation(businesses, productPrices, day) -
+    creditLineBalance
   );
 }
 

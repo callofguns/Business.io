@@ -22,6 +22,7 @@ const { BUILDINGS, buildingById, dailyRentFor } = await import("../src/data/buil
 const { BUSINESS_TYPES, STARTER_BUSINESS_OPTIONS } = await import("../src/data/businessTypes.js");
 const { STOCKS, stockById } = await import("../src/data/stocks.js");
 const { RIVALS, rivalById } = await import("../src/data/rivals.js");
+const { LOAN_PRODUCT } = await import("../src/data/loanProduct.js");
 const {
   expectedDailyRevenue,
   expectedDailyVisitors,
@@ -62,6 +63,8 @@ const {
   computeLeaderboard,
   computePlayerRank,
   RIVAL_NET_WORTH_FLOOR_RATIO,
+  creditLineInterest,
+  rollCreditLinePayment,
 } = await import("../src/lib/economy.js");
 const { weekdayIndex } = await import("../src/lib/format.js");
 
@@ -129,6 +132,7 @@ section("Initial store state (tax fields)");
   check("taxAccrued starts at 0", s.taxAccrued === 0);
   check("taxHistory starts empty", s.taxHistory.length === 0);
   check("lastTaxPaymentDay starts on day 1", s.lastTaxPaymentDay === 1);
+  check("creditLine starts unopened (null)", s.creditLine === null);
 }
 
 // ---------------------------------------------------------------------
@@ -619,6 +623,136 @@ section("Taxes");
 }
 
 // ---------------------------------------------------------------------
+section("Line of credit");
+{
+  // Pure formula checks
+  check("creditLineInterest is 0 when no line is open", creditLineInterest(null) === 0);
+  check(
+    "creditLineInterest = balance * dailyRate",
+    Math.abs(
+      creditLineInterest({ balance: 10000, dailyRate: LOAN_PRODUCT.dailyRate }) - 10000 * LOAN_PRODUCT.dailyRate
+    ) < 1e-9
+  );
+
+  const payableRoll = rollCreditLinePayment({ balance: 10000, dailyRate: LOAN_PRODUCT.dailyRate }, 1000000);
+  check(
+    "a payable day pays the interest from the bank, balance unchanged",
+    payableRoll.balance === 10000 && payableRoll.paidFromBank === payableRoll.interestCharged && !payableRoll.missed
+  );
+
+  const missedRoll = rollCreditLinePayment({ balance: 10000, dailyRate: LOAN_PRODUCT.dailyRate }, 0);
+  check(
+    "a missed day capitalizes the interest into the balance instead",
+    Math.abs(missedRoll.balance - (10000 + missedRoll.interestCharged)) < 1e-9 &&
+      missedRoll.paidFromBank === 0 &&
+      missedRoll.missed
+  );
+  check(
+    "rollCreditLinePayment with no line open is a no-op shape",
+    rollCreditLinePayment(null, 1000).balance === 0 && !rollCreditLinePayment(null, 1000).missed
+  );
+
+  // Guards before a line is open
+  const s0 = useGameStore.getState();
+  check("creditLine is still unopened here", s0.creditLine === null);
+  const bankBeforeGuard = s0.bankBalance;
+  useGameStore.getState().borrow({ amount: 1000 });
+  useGameStore.getState().repayCreditLine({ amount: 1000 });
+  check(
+    "borrow/repayCreditLine are no-ops with no line open",
+    useGameStore.getState().creditLine === null && useGameStore.getState().bankBalance === bankBeforeGuard
+  );
+
+  // Open the line
+  const dayAtOpen = useGameStore.getState().day;
+  useGameStore.getState().openCreditLine();
+  const s1 = useGameStore.getState();
+  check(
+    "openCreditLine sets the product's limit/rate with a 0 balance",
+    s1.creditLine.limit === LOAN_PRODUCT.limit &&
+      s1.creditLine.dailyRate === LOAN_PRODUCT.dailyRate &&
+      s1.creditLine.balance === 0 &&
+      s1.creditLine.openedDay === dayAtOpen
+  );
+  check("opening news entry recorded", s1.news[0].icon === "credit-card" && s1.news[0].title.includes("opened"));
+
+  // Opening again is a no-op
+  useGameStore.getState().openCreditLine();
+  check("openCreditLine is a no-op once already open", useGameStore.getState().news[0].id === s1.news[0].id);
+
+  // borrow guards: over the limit, zero/negative
+  useGameStore.getState().borrow({ amount: LOAN_PRODUCT.limit + 1 });
+  check("borrow over the limit is a no-op", useGameStore.getState().creditLine.balance === 0);
+  useGameStore.getState().borrow({ amount: 0 });
+  useGameStore.getState().borrow({ amount: -500 });
+  check("borrow of zero/negative is a no-op", useGameStore.getState().creditLine.balance === 0);
+
+  // borrow happy path
+  const bankBeforeBorrow = useGameStore.getState().bankBalance;
+  useGameStore.getState().borrow({ amount: 10000 });
+  const s2b = useGameStore.getState();
+  check(
+    "borrow credits the bank and increases the balance by the same amount",
+    s2b.bankBalance === bankBeforeBorrow + 10000 && s2b.creditLine.balance === 10000
+  );
+  check("borrow news entry recorded", s2b.news[0].icon === "credit-card" && s2b.news[0].title.includes("borrowed"));
+
+  // borrow beyond remaining available credit is a no-op
+  useGameStore.getState().borrow({ amount: LOAN_PRODUCT.limit - 10000 + 1 });
+  check("borrow beyond available credit is a no-op", useGameStore.getState().creditLine.balance === 10000);
+
+  // repayCreditLine guards: over the balance, over the bank
+  useGameStore.getState().repayCreditLine({ amount: 10001 });
+  check("repay over the outstanding balance is a no-op", useGameStore.getState().creditLine.balance === 10000);
+  const bankBeforeOverRepay = useGameStore.getState().bankBalance;
+  useGameStore.setState({ bankBalance: 500 });
+  useGameStore.getState().repayCreditLine({ amount: 501 });
+  check("repay over what's in the bank is a no-op", useGameStore.getState().creditLine.balance === 10000);
+  useGameStore.setState({ bankBalance: bankBeforeOverRepay });
+
+  // repayCreditLine happy path
+  const bankBeforeRepay = useGameStore.getState().bankBalance;
+  useGameStore.getState().repayCreditLine({ amount: 4000 });
+  const s3 = useGameStore.getState();
+  check(
+    "repayCreditLine debits the bank and reduces the balance by the same amount",
+    s3.bankBalance === bankBeforeRepay - 4000 && s3.creditLine.balance === 6000
+  );
+  check("repay news entry recorded", s3.news[0].icon === "credit-card" && s3.news[0].title.includes("repaid"));
+
+  // nextDay() wiring -- a payable day pays interest, principal untouched
+  useGameStore.setState({ bankBalance: 1000000 });
+  const balanceBeforePayableDay = useGameStore.getState().creditLine.balance;
+  const expectedInterest = creditLineInterest(useGameStore.getState().creditLine);
+  useGameStore.getState().nextDay();
+  const s4 = useGameStore.getState();
+  check(
+    "a payable day's interest is deducted via lastDaySummary.loanPayment, balance unchanged",
+    Math.abs(s4.lastDaySummary.loanPayment - expectedInterest) < 1e-6 && s4.creditLine.balance === balanceBeforePayableDay
+  );
+  check(
+    "no missed-payment news entry on a payable day",
+    !s4.news.some((n) => n.title.includes("Missed your line of credit"))
+  );
+
+  // nextDay() wiring -- a missed day capitalizes interest and warns
+  useGameStore.setState({ bankBalance: 0 });
+  const balanceBeforeMissedDay = useGameStore.getState().creditLine.balance;
+  const expectedMissedInterest = creditLineInterest(useGameStore.getState().creditLine);
+  useGameStore.getState().nextDay();
+  const s5 = useGameStore.getState();
+  check(
+    "a missed day capitalizes the interest into the balance via nextDay()",
+    Math.abs(s5.creditLine.balance - (balanceBeforeMissedDay + expectedMissedInterest)) < 1e-6 &&
+      s5.lastDaySummary.loanPayment === 0
+  );
+  check(
+    "a missed-payment news entry fires with a 'bad' tone",
+    s5.news.some((n) => n.title.includes("Missed your line of credit") && n.tone === "bad")
+  );
+}
+
+// ---------------------------------------------------------------------
 section("setProductPrice / demandMultiplier");
 {
   const s0 = useGameStore.getState();
@@ -880,8 +1014,10 @@ section("Stock prices roll daily + dividends paid via nextDay");
         (after.lastDaySummary.revenue -
           after.lastDaySummary.rent -
           after.lastDaySummary.wages -
-          after.lastDaySummary.otherExpenses +
-          after.lastDaySummary.dividends)
+          after.lastDaySummary.otherExpenses -
+          after.lastDaySummary.loanPayment +
+          after.lastDaySummary.dividends +
+          after.lastDaySummary.rentalIncome)
     ) < 1e-9
   );
   check(
@@ -1061,7 +1197,8 @@ section("Real estate wired into nextDay (rental income + market value roll)");
         (after.lastDaySummary.revenue -
           after.lastDaySummary.rent -
           after.lastDaySummary.wages -
-          after.lastDaySummary.otherExpenses +
+          after.lastDaySummary.otherExpenses -
+          after.lastDaySummary.loanPayment +
           after.lastDaySummary.dividends +
           after.lastDaySummary.rentalIncome)
     ) < 1e-9
@@ -1127,6 +1264,9 @@ section("Net worth formula");
     ) === 1000000
   );
 
+  const creditLineBalance = s.creditLine?.balance ?? 0;
+  check("a credit line is open with an outstanding balance here", creditLineBalance > 0);
+
   const netWorth = computeNetWorth({
     bankBalance: s.bankBalance,
     businesses: s.businesses,
@@ -1136,15 +1276,30 @@ section("Net worth formula");
     stockPrices: s.stockPrices,
     acquiredBuildings: s.acquiredBuildings,
     buildingMarketValues: s.buildingMarketValues,
+    creditLineBalance,
   });
   const expectedNetWorth =
     s.bankBalance +
     stockPortfolioValue(s.stockHoldings, s.stockPrices) +
     realEstatePortfolioValue(s.acquiredBuildings, s.buildingMarketValues) +
-    businessesValuation(s.businesses, s.productPrices, s.day);
+    businessesValuation(s.businesses, s.productPrices, s.day) -
+    creditLineBalance;
   check(
-    "computeNetWorth sums bankBalance + stocks + real estate + businesses",
+    "computeNetWorth sums bankBalance + stocks + real estate + businesses - credit line balance",
     Math.abs(netWorth - expectedNetWorth) < 1e-6
+  );
+  check(
+    "computeNetWorth without creditLineBalance defaults to subtracting 0 (non-breaking)",
+    computeNetWorth({
+      bankBalance: 10000,
+      businesses: [],
+      productPrices: s.productPrices,
+      day: s.day,
+      stockHoldings: {},
+      stockPrices: s.stockPrices,
+      acquiredBuildings: [],
+      buildingMarketValues: s.buildingMarketValues,
+    }) === 10000
   );
 }
 
@@ -1326,6 +1481,14 @@ section("30-day soak (no NaN/Infinity, news capped)");
     })
   );
   check(
+    "credit line balance finite and non-negative after the soak",
+    isFinite_(s.creditLine?.balance ?? 0) && (s.creditLine?.balance ?? 0) >= 0
+  );
+  check(
+    "lastDaySummary.loanPayment finite and non-negative",
+    isFinite_(s.lastDaySummary.loanPayment) && s.lastDaySummary.loanPayment >= 0
+  );
+  check(
     "computePlayerRank on the final state returns a rank within [1,7]",
     (() => {
       const netWorth = computeNetWorth({
@@ -1337,12 +1500,14 @@ section("30-day soak (no NaN/Infinity, news capped)");
         stockPrices: s.stockPrices,
         acquiredBuildings: s.acquiredBuildings,
         buildingMarketValues: s.buildingMarketValues,
+        creditLineBalance: s.creditLine?.balance ?? 0,
       });
       const rank = computePlayerRank(netWorth, s.rivalNetWorths);
       return rank >= 1 && rank <= 7;
     })()
   );
   console.log(`  tax: accrued=${s.taxAccrued.toFixed(2)} history=${s.taxHistory.length} entries`);
+  console.log(`  credit line: balance=${(s.creditLine?.balance ?? 0).toFixed(2)}`);
   console.log(`  final day=${s.day} bankBalance=${s.bankBalance.toFixed(2)}`);
   console.log(
     `  stocks: ${STOCKS.map((stock) => `${stock.ticker}=${s.stockPrices[stock.id].toFixed(2)}`).join(" ")}`

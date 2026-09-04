@@ -22,6 +22,7 @@ export function Rivals() {
   const acquiredBuildings = useGameStore((s) => s.acquiredBuildings);
   const buildingMarketValues = useGameStore((s) => s.buildingMarketValues);
   const rivalNetWorths = useGameStore((s) => s.rivalNetWorths);
+  const creditLine = useGameStore((s) => s.creditLine);
   const currency = useCurrencyStore((s) => s.currency);
 
   const leaderboard = useMemo(
@@ -36,6 +37,7 @@ export function Rivals() {
           stockPrices,
           acquiredBuildings,
           buildingMarketValues,
+          creditLineBalance: creditLine?.balance ?? 0,
         }),
         rivalNetWorths
       ),
@@ -49,6 +51,7 @@ export function Rivals() {
       acquiredBuildings,
       buildingMarketValues,
       rivalNetWorths,
+      creditLine,
     ]
   );
 
