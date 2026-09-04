@@ -4,9 +4,18 @@
 // mirror the actual GitHub release notes at
 // https://github.com/callofguns/Business.io/releases -- only released
 // versions belong here, nothing still sitting on `dev` unreleased.
-export const APP_VERSION = "v0.3.1-beta";
+export const APP_VERSION = "v0.3.2-beta";
 
 export const CHANGELOG = [
+  {
+    version: "v0.3.2-beta",
+    date: "2026-09-04",
+    title: "Mobile fix: scrolling and safe areas",
+    notes: [
+      "Fixed a bug where the page would scroll partway then snap back to a previous position on iOS",
+      "Content no longer overlaps the notch/status bar at the top or the home-indicator area at the bottom on iPhones",
+    ],
+  },
   {
     version: "v0.3.1-beta",
     date: "2026-09-04",
