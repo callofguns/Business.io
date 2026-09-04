@@ -4,9 +4,20 @@
 // mirror the actual GitHub release notes at
 // https://github.com/callofguns/Business.io/releases -- only released
 // versions belong here, nothing still sitting on `dev` unreleased.
-export const APP_VERSION = "v0.3.0-beta";
+export const APP_VERSION = "v0.3.1-beta";
 
 export const CHANGELOG = [
+  {
+    version: "v0.3.1-beta",
+    date: "2026-09-04",
+    title: "Stage 11: Loans",
+    notes: [
+      "New Loans screen — open a revolving Business Line of Credit ($25,000 limit, 24% APR) and borrow or repay freely, anytime",
+      "Interest accrues daily on your outstanding balance; if you can't cover it, the interest capitalizes into the balance instead of forcing a payment",
+      "Your credit line balance now counts as a liability everywhere net worth is calculated, including the Rivals leaderboard",
+      "No changes to any other economy system — businesses, stocks, real estate, and taxes work exactly as before",
+    ],
+  },
   {
     version: "v0.3.0-beta",
     date: "2026-09-03",
