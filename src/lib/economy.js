@@ -496,6 +496,33 @@ export function rollCreditLinePayment(creditLine, bankBalance) {
   };
 }
 
+// --- Savings account ---------------------------------------------------
+//
+// The mirror of the line of credit: always available (no "open" step,
+// unlike borrowing -- there's no credit risk in the bank holding your own
+// money), interest compounds daily on the balance, and unlike the credit
+// line it's *always* paid -- there's no bank balance to check against,
+// since interest is credited straight into the savings balance rather
+// than moved out of bankBalance. A separate opt-in "auto-deposit"
+// percentage sweeps a cut of each day's *positive* net income from
+// bankBalance into savings automatically; a loss day sweeps nothing.
+export function savingsInterest(savings) {
+  if (!savings) return 0;
+  return savings.balance * savings.dailyRate;
+}
+
+export function clampAutoDepositPercent(percent) {
+  if (!Number.isFinite(percent)) return 0;
+  return Math.max(0, Math.min(100, Math.round(percent)));
+}
+
+// netChangeBeforeSweep is the day's bankBalance delta *before* any sweep is
+// taken out of it -- only a positive day sweeps anything.
+export function computeAutoDeposit(netChangeBeforeSweep, autoDepositPercent) {
+  if (netChangeBeforeSweep <= 0 || autoDepositPercent <= 0) return 0;
+  return Math.round(netChangeBeforeSweep * (autoDepositPercent / 100));
+}
+
 // --- Net worth (Stage 9: Rivals) -----------------------------------------
 //
 // One combined figure summing every asset class the player can hold, used
@@ -548,12 +575,14 @@ export function computeNetWorth({
   acquiredBuildings,
   buildingMarketValues,
   creditLineBalance = 0,
+  savingsBalance = 0,
 }) {
   return (
     bankBalance +
     stockPortfolioValue(stockHoldings, stockPrices) +
     realEstatePortfolioValue(acquiredBuildings, buildingMarketValues) +
-    businessesValuation(businesses, productPrices, day) -
+    businessesValuation(businesses, productPrices, day) +
+    savingsBalance -
     creditLineBalance
   );
 }

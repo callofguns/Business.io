@@ -5,6 +5,7 @@ import { STARTER_BUSINESS_OPTIONS, BUSINESS_TYPES } from "../data/businessTypes"
 import { buildingById } from "../data/buildings";
 import { STOCKS, stockById } from "../data/stocks";
 import { LOAN_PRODUCT } from "../data/loanProduct";
+import { SAVINGS_PRODUCT } from "../data/savingsProduct";
 import {
   seedProductPrices,
   rollProductPrices,
@@ -35,6 +36,9 @@ import {
   computeNetWorth,
   computePlayerRank,
   rollCreditLinePayment,
+  savingsInterest,
+  clampAutoDepositPercent,
+  computeAutoDeposit,
 } from "../lib/economy";
 
 let newsIdSeq = 1;
@@ -115,6 +119,16 @@ const INITIAL_STATE = {
   // rollCreditLinePayment(); it's a liability, subtracted in
   // computeNetWorth().
   creditLine: null,
+  // Always present (no "open" step, unlike creditLine -- there's no risk in
+  // the bank holding your own money). Interest compounds daily on `balance`
+  // via savingsInterest() in nextDay(); `autoDepositPercent` (0-100, set via
+  // setAutoDepositPercent()) optionally sweeps a cut of each day's positive
+  // net income in automatically. An asset, added in computeNetWorth().
+  savings: {
+    balance: 0,
+    dailyRate: SAVINGS_PRODUCT.dailyRate,
+    autoDepositPercent: 0,
+  },
   news: [
     makeNewsEntry({
       icon: "briefcase",
@@ -558,6 +572,61 @@ export const useGameStore = create((set, get) => ({
     });
   },
 
+  // Moves `amount` from bankBalance into the savings balance.
+  depositSavings: ({ amount }) => {
+    const state = get();
+    const deposit = Math.round(amount);
+    if (!Number.isFinite(deposit) || deposit <= 0) return;
+    if (deposit > state.bankBalance) return;
+
+    const currency = useCurrencyStore.getState().currency;
+    set({
+      bankBalance: state.bankBalance - deposit,
+      savings: { ...state.savings, balance: state.savings.balance + deposit },
+      news: [
+        makeNewsEntry({
+          icon: "piggy-bank",
+          title: `You deposited ${formatMoney(deposit, { currency })}`,
+          subtitle: `Into your ${SAVINGS_PRODUCT.name}`,
+          tone: "neutral",
+          day: state.day,
+        }),
+        ...state.news,
+      ].slice(0, 30),
+    });
+  },
+
+  // Moves `amount` back out of savings into bankBalance.
+  withdrawSavings: ({ amount }) => {
+    const state = get();
+    const withdrawal = Math.round(amount);
+    if (!Number.isFinite(withdrawal) || withdrawal <= 0) return;
+    if (withdrawal > state.savings.balance) return;
+
+    const currency = useCurrencyStore.getState().currency;
+    set({
+      bankBalance: state.bankBalance + withdrawal,
+      savings: { ...state.savings, balance: state.savings.balance - withdrawal },
+      news: [
+        makeNewsEntry({
+          icon: "piggy-bank",
+          title: `You withdrew ${formatMoney(withdrawal, { currency })}`,
+          subtitle: `From your ${SAVINGS_PRODUCT.name}`,
+          tone: "neutral",
+          day: state.day,
+        }),
+        ...state.news,
+      ].slice(0, 30),
+    });
+  },
+
+  // percent: 0-100, how much of each day's *positive* net income
+  // automatically sweeps into savings (see computeAutoDeposit in nextDay).
+  setAutoDepositPercent: ({ percent }) => {
+    const state = get();
+    set({ savings: { ...state.savings, autoDepositPercent: clampAutoDepositPercent(percent) } });
+  },
+
   nextDay: () => {
     const {
       day,
@@ -575,6 +644,7 @@ export const useGameStore = create((set, get) => ({
       buildingMarketValues,
       rivalNetWorths,
       creditLine,
+      savings,
     } = get();
     const newDay = day + 1;
     const currency = useCurrencyStore.getState().currency;
@@ -596,6 +666,7 @@ export const useGameStore = create((set, get) => ({
         acquiredBuildings,
         buildingMarketValues,
         creditLineBalance: creditLine?.balance ?? 0,
+        savingsBalance: savings.balance,
       }),
       rivalNetWorths
     );
@@ -660,8 +731,20 @@ export const useGameStore = create((set, get) => ({
     const loanPayment = creditLineResult.paidFromBank;
     const nextCreditLine = creditLine ? { ...creditLine, balance: creditLineResult.balance } : null;
 
-    const netChange = businessIncome - rent - wages - otherExpenses - loanPayment + dividends + rentalIncome;
+    const netChangeBeforeSweep = businessIncome - rent - wages - otherExpenses - loanPayment + dividends + rentalIncome;
+
+    // Savings: interest is credited straight into the balance (never comes
+    // out of bankBalance -- the bank is paying you, there's nothing to
+    // check affordability against). Auto-deposit is a real transfer out of
+    // today's bank change (computed from the pre-sweep amount, only on a
+    // day that was actually profitable), and *does* need to be folded into
+    // netChange -- otherwise newBalance and the Day Summary's line items
+    // wouldn't reconcile with the displayed "Net Change".
+    const interestEarned = Math.round(savingsInterest(savings) * 100) / 100;
+    const autoDeposit = computeAutoDeposit(netChangeBeforeSweep, savings.autoDepositPercent);
+    const netChange = netChangeBeforeSweep - autoDeposit;
     const newBalance = bankBalance + netChange;
+    const nextSavings = { ...savings, balance: savings.balance + interestEarned + autoDeposit };
 
     const nextRivalNetWorths = rollRivalNetWorths(rivalNetWorths);
     const rankAfter = computePlayerRank(
@@ -675,6 +758,7 @@ export const useGameStore = create((set, get) => ({
         acquiredBuildings,
         buildingMarketValues: nextMarketValues,
         creditLineBalance: nextCreditLine?.balance ?? 0,
+        savingsBalance: nextSavings.balance,
       }),
       nextRivalNetWorths
     );
@@ -743,6 +827,28 @@ export const useGameStore = create((set, get) => ({
           title: "Rental income collected",
           subtitle: `+${formatMoney(rentalIncome, { currency })} from vacant owned properties`,
           tone: "good",
+          day: newDay,
+        })
+      );
+    }
+    if (interestEarned > 0) {
+      entries.push(
+        makeNewsEntry({
+          icon: "piggy-bank",
+          title: "Savings interest earned",
+          subtitle: `+${formatMoney(interestEarned, { currency, decimals: true })} · ${Math.round(SAVINGS_PRODUCT.apy * 100)}% APY`,
+          tone: "good",
+          day: newDay,
+        })
+      );
+    }
+    if (autoDeposit > 0) {
+      entries.push(
+        makeNewsEntry({
+          icon: "piggy-bank",
+          title: "Auto-deposit swept into savings",
+          subtitle: `${formatMoney(autoDeposit, { currency })} · ${savings.autoDepositPercent}% of today's net income`,
+          tone: "neutral",
           day: newDay,
         })
       );
@@ -818,6 +924,7 @@ export const useGameStore = create((set, get) => ({
       buildingMarketValues: nextMarketValues,
       rivalNetWorths: nextRivalNetWorths,
       creditLine: nextCreditLine,
+      savings: nextSavings,
       news: [...entries, ...news].slice(0, 30),
       lastDaySummary: {
         day: newDay,
@@ -828,6 +935,7 @@ export const useGameStore = create((set, get) => ({
         wages,
         otherExpenses,
         loanPayment,
+        autoDeposit,
         netChange,
         newBalance,
       },
