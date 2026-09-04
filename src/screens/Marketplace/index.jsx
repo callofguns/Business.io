@@ -5,7 +5,7 @@ import clsx from "clsx";
 import { BUILDINGS } from "../../data/buildings";
 import { useGameStore } from "../../state/gameStore";
 import { StatPill } from "../../components/ui/StatPill";
-import { PillButton } from "../../components/ui/Button";
+import { EmptyState } from "../../components/ui/EmptyState";
 import { Page } from "../../components/layout/Page";
 import { BuildingCard } from "./BuildingCard";
 import { AcquireBuildingModal } from "./AcquireBuildingModal";
@@ -43,18 +43,18 @@ export function Marketplace() {
       ? {
           title: `No ${typeFilter} buildings owned`,
           body: "You own buildings of a different type. Clear the filter to see them.",
-          action: { label: "Clear filter", onClick: () => setTypeFilter("all") },
+          action: { label: "Clear filter", variant: "outline", onClick: () => setTypeFilter("all") },
         }
       : view === "my-buildings"
       ? {
           title: "No buildings yet",
           body: "Acquire a building from the Market tab to see it here.",
-          action: { label: "Browse Market", onClick: () => setView("market") },
+          action: { label: "Browse Market", variant: "outline", onClick: () => setView("market") },
         }
       : {
           title: `No ${typeFilter} buildings`,
           body: "Try a different filter.",
-          action: { label: "Clear filter", onClick: () => setTypeFilter("all") },
+          action: { label: "Clear filter", variant: "outline", onClick: () => setTypeFilter("all") },
         };
 
   return (
@@ -119,13 +119,9 @@ export function Marketplace() {
       </div>
 
       {listedBuildings.length === 0 ? (
-        <div className="rounded-card border border-dashed border-border-strong bg-surface px-6 py-14 text-center">
-          <p className="text-[15px] font-semibold text-ink">{emptyState.title}</p>
-          <p className="mt-1 text-[13px] text-ink-faint">{emptyState.body}</p>
-          <PillButton size="sm" variant="outline" className="mt-4" onClick={emptyState.action.onClick}>
-            {emptyState.action.label}
-          </PillButton>
-        </div>
+        <EmptyState title={emptyState.title} action={emptyState.action}>
+          {emptyState.body}
+        </EmptyState>
       ) : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {listedBuildings.map((building) => (

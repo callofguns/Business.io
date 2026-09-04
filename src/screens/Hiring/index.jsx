@@ -1,8 +1,8 @@
 import { Users } from "lucide-react";
 import { useGameStore } from "../../state/gameStore";
 import { useUiStore } from "../../state/uiStore";
-import { PillButton } from "../../components/ui/Button";
 import { StatPill } from "../../components/ui/StatPill";
+import { EmptyState } from "../../components/ui/EmptyState";
 import { Page } from "../../components/layout/Page";
 import { StaffCard } from "./StaffCard";
 
@@ -25,15 +25,12 @@ export function Hiring() {
       </div>
 
       {businesses.length === 0 ? (
-        <div className="rounded-card border border-dashed border-border-strong bg-surface px-6 py-14 text-center">
-          <p className="text-[15px] font-semibold text-ink">No businesses yet</p>
-          <p className="mt-1 text-[13px] text-ink-faint">
-            Start a business in My Empire before you can hire staff for it.
-          </p>
-          <PillButton size="sm" className="mt-4" onClick={() => setScreen("empire")}>
-            Open My Empire
-          </PillButton>
-        </div>
+        <EmptyState
+          title="No businesses yet"
+          action={{ label: "Open My Empire", onClick: () => setScreen("empire") }}
+        >
+          Start a business in My Empire before you can hire staff for it.
+        </EmptyState>
       ) : (
         <div className="flex flex-col gap-4">
           {businesses.map((business) => (

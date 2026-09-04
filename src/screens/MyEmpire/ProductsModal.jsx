@@ -3,6 +3,7 @@ import { RotateCcw } from "lucide-react";
 import clsx from "clsx";
 import { Modal } from "../../components/ui/Modal";
 import { PillButton } from "../../components/ui/Button";
+import { AmountInput } from "../../components/ui/AmountInput";
 import { useGameStore } from "../../state/gameStore";
 import { useCurrencyStore } from "../../state/currencyStore";
 import { formatMoney } from "../../lib/format";
@@ -37,22 +38,17 @@ function ProductRow({ business, product, productPrices, currency, onSetPrice }) 
         <p className="text-[12px] text-ink-faint">Market: {formatMoney(market, { currency, decimals: true })}</p>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
-        <div className="flex h-9 items-center rounded-xl border border-border-strong bg-surface pl-2.5 pr-1">
-          <span className="text-[13px] text-ink-faint">$</span>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={commit}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") e.currentTarget.blur();
-            }}
-            aria-label={`Price for ${product.name}`}
-            className="h-full w-16 bg-transparent px-1 text-right text-[13px] font-semibold text-ink"
-          />
-        </div>
+        <AmountInput
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur();
+          }}
+          prefix="$"
+          step="0.01"
+          ariaLabel={`Price for ${product.name}`}
+        />
         {isCustom ? (
           <button
             type="button"
