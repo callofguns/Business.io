@@ -23,6 +23,7 @@ const { BUSINESS_TYPES, STARTER_BUSINESS_OPTIONS } = await import("../src/data/b
 const { STOCKS, stockById } = await import("../src/data/stocks.js");
 const { RIVALS, rivalById } = await import("../src/data/rivals.js");
 const { LOAN_PRODUCT } = await import("../src/data/loanProduct.js");
+const { SAVINGS_PRODUCT } = await import("../src/data/savingsProduct.js");
 const {
   expectedDailyRevenue,
   expectedDailyVisitors,
@@ -65,6 +66,9 @@ const {
   RIVAL_NET_WORTH_FLOOR_RATIO,
   creditLineInterest,
   rollCreditLinePayment,
+  savingsInterest,
+  clampAutoDepositPercent,
+  computeAutoDeposit,
 } = await import("../src/lib/economy.js");
 const { weekdayIndex } = await import("../src/lib/format.js");
 
@@ -133,6 +137,12 @@ section("Initial store state (tax fields)");
   check("taxHistory starts empty", s.taxHistory.length === 0);
   check("lastTaxPaymentDay starts on day 1", s.lastTaxPaymentDay === 1);
   check("creditLine starts unopened (null)", s.creditLine === null);
+  check(
+    "savings starts at 0 balance with the product's rate and 0% auto-deposit",
+    s.savings.balance === 0 &&
+      s.savings.dailyRate === SAVINGS_PRODUCT.dailyRate &&
+      s.savings.autoDepositPercent === 0
+  );
 }
 
 // ---------------------------------------------------------------------
@@ -753,6 +763,110 @@ section("Line of credit");
 }
 
 // ---------------------------------------------------------------------
+section("Savings");
+{
+  // Pure formula checks
+  check("savingsInterest is 0 when passed null", savingsInterest(null) === 0);
+  check(
+    "savingsInterest = balance * dailyRate",
+    Math.abs(
+      savingsInterest({ balance: 10000, dailyRate: SAVINGS_PRODUCT.dailyRate }) - 10000 * SAVINGS_PRODUCT.dailyRate
+    ) < 1e-9
+  );
+  check("clampAutoDepositPercent clamps negative to 0", clampAutoDepositPercent(-10) === 0);
+  check("clampAutoDepositPercent clamps above 100 to 100", clampAutoDepositPercent(150) === 100);
+  check("clampAutoDepositPercent rounds fractional input", clampAutoDepositPercent(37.6) === 38);
+  check("clampAutoDepositPercent treats NaN as 0", clampAutoDepositPercent(NaN) === 0);
+  check("computeAutoDeposit sweeps nothing on a loss day", computeAutoDeposit(-500, 50) === 0);
+  check("computeAutoDeposit sweeps nothing at 0%", computeAutoDeposit(1000, 0) === 0);
+  check("computeAutoDeposit = netChange * percent/100, rounded", computeAutoDeposit(1000, 25) === 250);
+
+  // Guards
+  const s0 = useGameStore.getState();
+  const bankBeforeGuard = s0.bankBalance;
+  useGameStore.getState().depositSavings({ amount: 0 });
+  useGameStore.getState().depositSavings({ amount: -100 });
+  useGameStore.getState().depositSavings({ amount: bankBeforeGuard + 1 });
+  check(
+    "depositSavings is a no-op for zero/negative/unaffordable amounts",
+    useGameStore.getState().savings.balance === 0 && useGameStore.getState().bankBalance === bankBeforeGuard
+  );
+  useGameStore.getState().withdrawSavings({ amount: 1 });
+  check("withdrawSavings is a no-op with nothing saved", useGameStore.getState().bankBalance === bankBeforeGuard);
+
+  // Deposit happy path -- force a comfortably large balance first, since
+  // whatever nextDay()/borrow/repay left bankBalance at by this point in
+  // the script isn't guaranteed to cover a flat 20000 deposit.
+  useGameStore.setState({ bankBalance: 500000 });
+  const bankBeforeDeposit = useGameStore.getState().bankBalance;
+  useGameStore.getState().depositSavings({ amount: 20000 });
+  const s1 = useGameStore.getState();
+  check(
+    "depositSavings moves the amount from bank to savings",
+    s1.bankBalance === bankBeforeDeposit - 20000 && s1.savings.balance === 20000
+  );
+  check("deposit news entry recorded", s1.news[0].icon === "piggy-bank" && s1.news[0].title.includes("deposited"));
+
+  // Withdraw guards: over the savings balance
+  useGameStore.getState().withdrawSavings({ amount: 20001 });
+  check("withdraw over the savings balance is a no-op", useGameStore.getState().savings.balance === 20000);
+
+  // Withdraw happy path
+  const bankBeforeWithdraw = useGameStore.getState().bankBalance;
+  useGameStore.getState().withdrawSavings({ amount: 5000 });
+  const s2 = useGameStore.getState();
+  check(
+    "withdrawSavings moves the amount from savings to bank",
+    s2.bankBalance === bankBeforeWithdraw + 5000 && s2.savings.balance === 15000
+  );
+  check("withdraw news entry recorded", s2.news[0].icon === "piggy-bank" && s2.news[0].title.includes("withdrew"));
+
+  // setAutoDepositPercent clamps the same way the pure function does
+  useGameStore.getState().setAutoDepositPercent({ percent: 250 });
+  check("setAutoDepositPercent clamps an out-of-range value", useGameStore.getState().savings.autoDepositPercent === 100);
+  useGameStore.getState().setAutoDepositPercent({ percent: 40 });
+  check("setAutoDepositPercent accepts an in-range value", useGameStore.getState().savings.autoDepositPercent === 40);
+
+  // nextDay() wiring -- interest always credits (no affordability check,
+  // unlike the credit line), and the auto-deposit sweep + netChange/
+  // newBalance all reconcile against the day's other lastDaySummary fields,
+  // the same recompute-and-compare technique used for dividends/rental
+  // income above.
+  const savingsBalanceBefore = useGameStore.getState().savings.balance;
+  const expectedInterest = Math.round(savingsInterest(useGameStore.getState().savings) * 100) / 100;
+  const balanceBeforeDay = useGameStore.getState().bankBalance;
+  useGameStore.getState().nextDay();
+  const s3 = useGameStore.getState();
+  const netChangeBeforeSweep =
+    s3.lastDaySummary.revenue -
+    s3.lastDaySummary.rent -
+    s3.lastDaySummary.wages -
+    s3.lastDaySummary.otherExpenses -
+    s3.lastDaySummary.loanPayment +
+    s3.lastDaySummary.dividends +
+    s3.lastDaySummary.rentalIncome;
+  const expectedAutoDeposit = computeAutoDeposit(netChangeBeforeSweep, 40);
+  check("lastDaySummary.autoDeposit matches computeAutoDeposit on the day's actual net change", s3.lastDaySummary.autoDeposit === expectedAutoDeposit);
+  check(
+    "netChange and newBalance both reflect the auto-deposit sweep",
+    Math.abs(s3.lastDaySummary.netChange - (netChangeBeforeSweep - expectedAutoDeposit)) < 1e-6 &&
+      s3.bankBalance === balanceBeforeDay + s3.lastDaySummary.netChange
+  );
+  check(
+    "savings balance grew by interest plus any auto-deposit, nothing else",
+    Math.abs(s3.savings.balance - (savingsBalanceBefore + expectedInterest + expectedAutoDeposit)) < 1e-6
+  );
+  check(
+    "a savings interest news entry fires whenever interest is nonzero",
+    expectedInterest <= 0 || s3.news.some((n) => n.icon === "piggy-bank" && n.title.includes("interest"))
+  );
+
+  // Turn auto-deposit back off so it doesn't skew later sections' numbers
+  useGameStore.getState().setAutoDepositPercent({ percent: 0 });
+  check("setAutoDepositPercent(0) turns the sweep back off", useGameStore.getState().savings.autoDepositPercent === 0);
+}
+
+// ---------------------------------------------------------------------
 section("setProductPrice / demandMultiplier");
 {
   const s0 = useGameStore.getState();
@@ -1266,6 +1380,8 @@ section("Net worth formula");
 
   const creditLineBalance = s.creditLine?.balance ?? 0;
   check("a credit line is open with an outstanding balance here", creditLineBalance > 0);
+  const savingsBalance = s.savings.balance;
+  check("savings has a positive balance here", savingsBalance > 0);
 
   const netWorth = computeNetWorth({
     bankBalance: s.bankBalance,
@@ -1277,19 +1393,21 @@ section("Net worth formula");
     acquiredBuildings: s.acquiredBuildings,
     buildingMarketValues: s.buildingMarketValues,
     creditLineBalance,
+    savingsBalance,
   });
   const expectedNetWorth =
     s.bankBalance +
     stockPortfolioValue(s.stockHoldings, s.stockPrices) +
     realEstatePortfolioValue(s.acquiredBuildings, s.buildingMarketValues) +
-    businessesValuation(s.businesses, s.productPrices, s.day) -
+    businessesValuation(s.businesses, s.productPrices, s.day) +
+    savingsBalance -
     creditLineBalance;
   check(
-    "computeNetWorth sums bankBalance + stocks + real estate + businesses - credit line balance",
+    "computeNetWorth sums bankBalance + stocks + real estate + businesses + savings - credit line balance",
     Math.abs(netWorth - expectedNetWorth) < 1e-6
   );
   check(
-    "computeNetWorth without creditLineBalance defaults to subtracting 0 (non-breaking)",
+    "computeNetWorth without creditLineBalance/savingsBalance defaults both to 0 (non-breaking)",
     computeNetWorth({
       bankBalance: 10000,
       businesses: [],
@@ -1300,6 +1418,20 @@ section("Net worth formula");
       acquiredBuildings: [],
       buildingMarketValues: s.buildingMarketValues,
     }) === 10000
+  );
+  check(
+    "savingsBalance is added, the mirror of creditLineBalance being subtracted",
+    computeNetWorth({
+      bankBalance: 10000,
+      businesses: [],
+      productPrices: s.productPrices,
+      day: s.day,
+      stockHoldings: {},
+      stockPrices: s.stockPrices,
+      acquiredBuildings: [],
+      buildingMarketValues: s.buildingMarketValues,
+      savingsBalance: 4000,
+    }) === 14000
   );
 }
 
@@ -1488,6 +1620,11 @@ section("30-day soak (no NaN/Infinity, news capped)");
     "lastDaySummary.loanPayment finite and non-negative",
     isFinite_(s.lastDaySummary.loanPayment) && s.lastDaySummary.loanPayment >= 0
   );
+  check("savings balance finite and non-negative after the soak", isFinite_(s.savings.balance) && s.savings.balance >= 0);
+  check(
+    "lastDaySummary.autoDeposit finite and non-negative",
+    isFinite_(s.lastDaySummary.autoDeposit) && s.lastDaySummary.autoDeposit >= 0
+  );
   check(
     "computePlayerRank on the final state returns a rank within [1,7]",
     (() => {
@@ -1501,6 +1638,7 @@ section("30-day soak (no NaN/Infinity, news capped)");
         acquiredBuildings: s.acquiredBuildings,
         buildingMarketValues: s.buildingMarketValues,
         creditLineBalance: s.creditLine?.balance ?? 0,
+        savingsBalance: s.savings.balance,
       });
       const rank = computePlayerRank(netWorth, s.rivalNetWorths);
       return rank >= 1 && rank <= 7;
@@ -1508,6 +1646,7 @@ section("30-day soak (no NaN/Infinity, news capped)");
   );
   console.log(`  tax: accrued=${s.taxAccrued.toFixed(2)} history=${s.taxHistory.length} entries`);
   console.log(`  credit line: balance=${(s.creditLine?.balance ?? 0).toFixed(2)}`);
+  console.log(`  savings: balance=${s.savings.balance.toFixed(2)} autoDepositPercent=${s.savings.autoDepositPercent}`);
   console.log(`  final day=${s.day} bankBalance=${s.bankBalance.toFixed(2)}`);
   console.log(
     `  stocks: ${STOCKS.map((stock) => `${stock.ticker}=${s.stockPrices[stock.id].toFixed(2)}`).join(" ")}`

@@ -42,6 +42,7 @@ export function DaySummaryModal({ open, onClose }) {
           <SummaryRow label="Rent" amount={summary.rent} currency={currency} isExpense />
           <SummaryRow label="Wages" amount={summary.wages} currency={currency} isExpense />
           <SummaryRow label="Loan Payment" amount={summary.loanPayment} currency={currency} isExpense />
+          <SummaryRow label="Auto-Deposit" amount={summary.autoDeposit} currency={currency} isExpense />
           <SummaryRow label="Other Expenses" amount={summary.otherExpenses} currency={currency} isExpense />
         </div>
 

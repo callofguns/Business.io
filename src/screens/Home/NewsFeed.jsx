@@ -14,6 +14,7 @@ import {
   Users,
   Trophy,
   CreditCard,
+  PiggyBank,
 } from "lucide-react";
 
 const ICONS = {
@@ -30,6 +31,7 @@ const ICONS = {
   users: Users,
   trophy: Trophy,
   "credit-card": CreditCard,
+  "piggy-bank": PiggyBank,
 };
 
 const TILE_TONES = {
