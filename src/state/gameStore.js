@@ -4,6 +4,7 @@ import { formatMoney, weekdayIndex } from "../lib/format";
 import { STARTER_BUSINESS_OPTIONS, BUSINESS_TYPES } from "../data/businessTypes";
 import { buildingById } from "../data/buildings";
 import { STOCKS, stockById } from "../data/stocks";
+import { LOAN_PRODUCT } from "../data/loanProduct";
 import {
   seedProductPrices,
   rollProductPrices,
@@ -33,6 +34,7 @@ import {
   rollRivalNetWorths,
   computeNetWorth,
   computePlayerRank,
+  rollCreditLinePayment,
 } from "../lib/economy";
 
 let newsIdSeq = 1;
@@ -106,6 +108,13 @@ const INITIAL_STATE = {
   // is never stored -- it's always computed fresh via computeNetWorth from
   // the state slices that already exist for each asset class.
   rivalNetWorths: seedRivalNetWorths(),
+  // null until openCreditLine() is called (Stage 11: Loans); then
+  // { limit, dailyRate, balance, openedDay }. A single revolving line, not
+  // a list -- borrow/repayCreditLine adjust `balance` freely up to `limit`.
+  // Interest accrues daily on `balance` in nextDay() via
+  // rollCreditLinePayment(); it's a liability, subtracted in
+  // computeNetWorth().
+  creditLine: null,
   news: [
     makeNewsEntry({
       icon: "briefcase",
@@ -465,6 +474,90 @@ export const useGameStore = create((set, get) => ({
     });
   },
 
+  // Opens the single revolving Business Line of Credit (Stage 11: Loans) --
+  // free, instant, a no-op if one is already open.
+  openCreditLine: () => {
+    const state = get();
+    if (state.creditLine) return;
+
+    set({
+      creditLine: {
+        limit: LOAN_PRODUCT.limit,
+        dailyRate: LOAN_PRODUCT.dailyRate,
+        balance: 0,
+        openedDay: state.day,
+      },
+      news: [
+        makeNewsEntry({
+          icon: "credit-card",
+          title: `You opened a ${LOAN_PRODUCT.name}`,
+          subtitle: `${Math.round(LOAN_PRODUCT.apr * 100)}% APR · up to ${formatMoney(LOAN_PRODUCT.limit, {
+            currency: useCurrencyStore.getState().currency,
+          })} available`,
+          tone: "neutral",
+          day: state.day,
+        }),
+        ...state.news,
+      ].slice(0, 30),
+    });
+  },
+
+  // Draws `amount` from the open credit line, up to available credit
+  // (limit - balance). Credited straight to bankBalance.
+  borrow: ({ amount }) => {
+    const state = get();
+    const { creditLine } = state;
+    if (!creditLine) return;
+    const draw = Math.round(amount);
+    if (!Number.isFinite(draw) || draw <= 0) return;
+    const available = creditLine.limit - creditLine.balance;
+    if (draw > available) return;
+
+    const currency = useCurrencyStore.getState().currency;
+    set({
+      bankBalance: state.bankBalance + draw,
+      creditLine: { ...creditLine, balance: creditLine.balance + draw },
+      news: [
+        makeNewsEntry({
+          icon: "credit-card",
+          title: `You borrowed ${formatMoney(draw, { currency })}`,
+          subtitle: `From your ${LOAN_PRODUCT.name}`,
+          tone: "neutral",
+          day: state.day,
+        }),
+        ...state.news,
+      ].slice(0, 30),
+    });
+  },
+
+  // Voluntary repayment toward the credit line balance, up to what's owed
+  // and what's actually in the bank.
+  repayCreditLine: ({ amount }) => {
+    const state = get();
+    const { creditLine } = state;
+    if (!creditLine) return;
+    const payment = Math.round(amount);
+    if (!Number.isFinite(payment) || payment <= 0) return;
+    if (payment > creditLine.balance) return;
+    if (payment > state.bankBalance) return;
+
+    const currency = useCurrencyStore.getState().currency;
+    set({
+      bankBalance: state.bankBalance - payment,
+      creditLine: { ...creditLine, balance: creditLine.balance - payment },
+      news: [
+        makeNewsEntry({
+          icon: "credit-card",
+          title: `You repaid ${formatMoney(payment, { currency })}`,
+          subtitle: `Toward your ${LOAN_PRODUCT.name}`,
+          tone: "neutral",
+          day: state.day,
+        }),
+        ...state.news,
+      ].slice(0, 30),
+    });
+  },
+
   nextDay: () => {
     const {
       day,
@@ -481,6 +574,7 @@ export const useGameStore = create((set, get) => ({
       stockHoldings,
       buildingMarketValues,
       rivalNetWorths,
+      creditLine,
     } = get();
     const newDay = day + 1;
     const currency = useCurrencyStore.getState().currency;
@@ -492,7 +586,17 @@ export const useGameStore = create((set, get) => ({
     // then again right before the final set() once every asset class has
     // its new-day value.
     const rankBefore = computePlayerRank(
-      computeNetWorth({ bankBalance, businesses, productPrices, day, stockHoldings, stockPrices, acquiredBuildings, buildingMarketValues }),
+      computeNetWorth({
+        bankBalance,
+        businesses,
+        productPrices,
+        day,
+        stockHoldings,
+        stockPrices,
+        acquiredBuildings,
+        buildingMarketValues,
+        creditLineBalance: creditLine?.balance ?? 0,
+      }),
       rivalNetWorths
     );
 
@@ -548,7 +652,15 @@ export const useGameStore = create((set, get) => ({
       ? [{ day: newDay, amount: otherExpenses }, ...taxHistory].slice(0, 24)
       : taxHistory;
 
-    const netChange = businessIncome - rent - wages - otherExpenses + dividends + rentalIncome;
+    // Line of credit: today's interest is paid out of the bank if
+    // affordable, otherwise it capitalizes into the balance instead (see
+    // rollCreditLinePayment) -- loanPayment is what actually left the bank,
+    // 0 on a missed day.
+    const creditLineResult = rollCreditLinePayment(creditLine, bankBalance);
+    const loanPayment = creditLineResult.paidFromBank;
+    const nextCreditLine = creditLine ? { ...creditLine, balance: creditLineResult.balance } : null;
+
+    const netChange = businessIncome - rent - wages - otherExpenses - loanPayment + dividends + rentalIncome;
     const newBalance = bankBalance + netChange;
 
     const nextRivalNetWorths = rollRivalNetWorths(rivalNetWorths);
@@ -562,6 +674,7 @@ export const useGameStore = create((set, get) => ({
         stockPrices: nextStockPrices,
         acquiredBuildings,
         buildingMarketValues: nextMarketValues,
+        creditLineBalance: nextCreditLine?.balance ?? 0,
       }),
       nextRivalNetWorths
     );
@@ -668,6 +781,17 @@ export const useGameStore = create((set, get) => ({
         })
       );
     }
+    if (creditLineResult.missed) {
+      entries.push(
+        makeNewsEntry({
+          icon: "credit-card",
+          title: "Missed your line of credit payment",
+          subtitle: `${formatMoney(creditLineResult.interestCharged, { currency, decimals: true })} interest added to your balance`,
+          tone: "bad",
+          day: newDay,
+        })
+      );
+    }
     if (newBalance < 0) {
       entries.push(
         makeNewsEntry({
@@ -693,6 +817,7 @@ export const useGameStore = create((set, get) => ({
       stockPriceHistory: nextStockPriceHistory,
       buildingMarketValues: nextMarketValues,
       rivalNetWorths: nextRivalNetWorths,
+      creditLine: nextCreditLine,
       news: [...entries, ...news].slice(0, 30),
       lastDaySummary: {
         day: newDay,
@@ -702,6 +827,7 @@ export const useGameStore = create((set, get) => ({
         rent,
         wages,
         otherExpenses,
+        loanPayment,
         netChange,
         newBalance,
       },

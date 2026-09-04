@@ -13,6 +13,7 @@ import {
   Receipt,
   Users,
   Trophy,
+  CreditCard,
 } from "lucide-react";
 
 const ICONS = {
@@ -28,6 +29,7 @@ const ICONS = {
   receipt: Receipt,
   users: Users,
   trophy: Trophy,
+  "credit-card": CreditCard,
 };
 
 const TILE_TONES = {
