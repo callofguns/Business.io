@@ -1,4 +1,4 @@
-import { MapPin, Gauge, Banknote, UserPlus, UserMinus } from "lucide-react";
+import { MapPin, Smile, Banknote, UserPlus, UserMinus } from "lucide-react";
 import { Card } from "../../components/ui/Card";
 import { IconRow } from "../../components/ui/IconRow";
 import { PillButton } from "../../components/ui/Button";
@@ -6,7 +6,13 @@ import { BusinessTypeIcon } from "../../components/ui/BusinessTypeIcon";
 import { useGameStore } from "../../state/gameStore";
 import { useCurrencyStore } from "../../state/currencyStore";
 import { buildingById } from "../../data/buildings";
-import { staffHireCost, staffFireResult, dailyWagePerStaff, maxStaffFor } from "../../lib/economy";
+import {
+  staffHireCost,
+  staffFireResult,
+  dailyWagePerStaff,
+  maxStaffFor,
+  staffSatisfactionBonusFor,
+} from "../../lib/economy";
 import { formatMoney } from "../../lib/format";
 
 export function StaffCard({ business }) {
@@ -22,6 +28,9 @@ export function StaffCard({ business }) {
   const maxStaff = maxStaffFor(building);
   const dailyWage = dailyWagePerStaff(business.type);
   const totalWage = staffCount * dailyWage;
+
+  const satisfactionBonus = staffSatisfactionBonusFor(staffCount, building);
+  const satisfactionBonusLabel = `${satisfactionBonus >= 0 ? "+" : ""}${satisfactionBonus} to satisfaction target`;
 
   const hire = staffHireCost(business, building);
   const canAffordHire = hire && bankBalance >= hire.fee;
@@ -51,8 +60,8 @@ export function StaffCard({ business }) {
       </div>
 
       <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
-        <IconRow icon={Gauge}>
-          {business.currentCapacity}/{building.customerCapacity} capacity
+        <IconRow icon={Smile} iconClassName={satisfactionBonus >= 0 ? "text-good-500" : "text-bad-500"}>
+          {satisfactionBonusLabel}
         </IconRow>
         <IconRow icon={Banknote} iconClassName="text-good-500">
           {formatMoney(totalWage, { currency })}/day in wages

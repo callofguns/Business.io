@@ -6,14 +6,17 @@ import { buildingById } from "../data/buildings";
 import { STOCKS, stockById } from "../data/stocks";
 import { LOAN_PRODUCT } from "../data/loanProduct";
 import { SAVINGS_PRODUCT } from "../data/savingsProduct";
+import { equipmentItemById } from "../data/equipment";
 import {
   seedProductPrices,
   rollProductPrices,
   rollDailyOutcome,
-  startingCapacity,
   staffHireCost,
   staffFireResult,
+  maxStaffFor,
   totalDailyWages,
+  capacityFromEquipment,
+  staffingRatioFor,
   priceRatio,
   satisfactionTarget,
   stepSatisfaction,
@@ -200,10 +203,16 @@ export const useGameStore = create((set, get) => ({
       buildingId,
       active: true,
       dailyEarnings: 0,
-      currentCapacity: startingCapacity(building),
-      // Headcount hired on the Hiring screen -- currentCapacity is always
-      // kept in lockstep with this via hireStaff/fireStaff (see
-      // capacityForStaff in lib/economy.js), never adjusted independently.
+      // Starts at 0 -- capacity now comes entirely from purchasable
+      // equipment (see buyEquipment/sellEquipment and
+      // capacityFromEquipment in lib/economy.js), kept in lockstep with
+      // `equipment` below, never adjusted independently.
+      currentCapacity: 0,
+      // Sparse { [equipmentId]: quantity }, see data/equipment.js.
+      equipment: {},
+      // Headcount hired on the Hiring screen -- no longer drives capacity
+      // (Stage 13); raises the satisfaction target instead, see
+      // satisfactionTarget's staffing term in lib/economy.js.
       staffCount: 0,
       startedDay: state.day,
       // Sparse { [productId]: price } -- unset products just follow the
@@ -249,18 +258,17 @@ export const useGameStore = create((set, get) => ({
     if (state.bankBalance < result.fee) return;
 
     const currency = useCurrencyStore.getState().currency;
+    const maxStaff = maxStaffFor(building);
     set({
       bankBalance: state.bankBalance - result.fee,
       businesses: state.businesses.map((b) =>
-        b.id === businessId
-          ? { ...b, staffCount: result.nextStaffCount, currentCapacity: result.nextCapacity }
-          : b
+        b.id === businessId ? { ...b, staffCount: result.nextStaffCount } : b
       ),
       news: [
         makeNewsEntry({
           icon: "users",
           title: `${business.name} hired a new staff member`,
-          subtitle: `-${formatMoney(result.fee, { currency })} hiring fee · ${formatMoney(result.dailyWage, { currency })}/day wage · ${result.nextCapacity}/hr capacity`,
+          subtitle: `-${formatMoney(result.fee, { currency })} hiring fee · ${formatMoney(result.dailyWage, { currency })}/day wage · ${result.nextStaffCount}/${maxStaff} staff, better service`,
           tone: "good",
           day: state.day,
         }),
@@ -279,17 +287,91 @@ export const useGameStore = create((set, get) => ({
     const result = staffFireResult(business, building);
     if (!result) return; // no staff left to let go
 
+    const maxStaff = maxStaffFor(building);
     set({
       businesses: state.businesses.map((b) =>
-        b.id === businessId
-          ? { ...b, staffCount: result.nextStaffCount, currentCapacity: result.nextCapacity }
-          : b
+        b.id === businessId ? { ...b, staffCount: result.nextStaffCount } : b
       ),
       news: [
         makeNewsEntry({
           icon: "users",
           title: `${business.name} let a staff member go`,
-          subtitle: `${result.nextCapacity}/hr capacity · daily wages reduced`,
+          subtitle: `${result.nextStaffCount}/${maxStaff} staff · daily wages reduced, service quality may suffer`,
+          tone: "neutral",
+          day: state.day,
+        }),
+        ...state.news,
+      ].slice(0, 30),
+    });
+  },
+
+  // Buys one unit of an equipment item, raising currentCapacity (capped at
+  // the building's own customerCapacity -- see capacityFromEquipment). A
+  // no-op once there's no capacity headroom left, so money is never spent
+  // for zero effect.
+  buyEquipment: ({ businessId, equipmentId }) => {
+    const state = get();
+    const business = state.businesses.find((b) => b.id === businessId);
+    if (!business) return;
+    const building = buildingById(business.buildingId);
+    if (!building) return;
+    const item = equipmentItemById(business.type, equipmentId);
+    if (!item) return;
+    if (capacityFromEquipment(business.equipment, business.type, building) >= building.customerCapacity) return;
+    if (state.bankBalance < item.cost) return;
+
+    const nextEquipment = { ...business.equipment, [item.id]: (business.equipment?.[item.id] ?? 0) + 1 };
+    const nextCapacity = capacityFromEquipment(nextEquipment, business.type, building);
+    const currency = useCurrencyStore.getState().currency;
+    set({
+      bankBalance: state.bankBalance - item.cost,
+      businesses: state.businesses.map((b) =>
+        b.id === businessId ? { ...b, equipment: nextEquipment, currentCapacity: nextCapacity } : b
+      ),
+      news: [
+        makeNewsEntry({
+          icon: "package",
+          title: `${business.name} bought a ${item.name}`,
+          subtitle: `-${formatMoney(item.cost, { currency })} · ${nextCapacity}/${building.customerCapacity} capacity`,
+          tone: "good",
+          day: state.day,
+        }),
+        ...state.news,
+      ].slice(0, 30),
+    });
+  },
+
+  // Sells one unit back at sellValue (a resale discount off the original
+  // cost -- see data/equipment.js). A no-op if none are owned.
+  sellEquipment: ({ businessId, equipmentId }) => {
+    const state = get();
+    const business = state.businesses.find((b) => b.id === businessId);
+    if (!business) return;
+    const building = buildingById(business.buildingId);
+    if (!building) return;
+    const item = equipmentItemById(business.type, equipmentId);
+    if (!item) return;
+    const owned = business.equipment?.[item.id] ?? 0;
+    if (owned <= 0) return;
+
+    const nextEquipment = { ...business.equipment };
+    if (owned - 1 > 0) {
+      nextEquipment[item.id] = owned - 1;
+    } else {
+      delete nextEquipment[item.id];
+    }
+    const nextCapacity = capacityFromEquipment(nextEquipment, business.type, building);
+    const currency = useCurrencyStore.getState().currency;
+    set({
+      bankBalance: state.bankBalance + item.sellValue,
+      businesses: state.businesses.map((b) =>
+        b.id === businessId ? { ...b, equipment: nextEquipment, currentCapacity: nextCapacity } : b
+      ),
+      news: [
+        makeNewsEntry({
+          icon: "package",
+          title: `${business.name} sold a ${item.name}`,
+          subtitle: `+${formatMoney(item.sellValue, { currency })} · ${nextCapacity}/${building.customerCapacity} capacity`,
           tone: "neutral",
           day: state.day,
         }),
@@ -680,7 +762,7 @@ export const useGameStore = create((set, get) => ({
       activeCount += 1;
       const { revenue, visitors } = rollDailyOutcome(b, building, prices, newDay);
       businessIncome += revenue;
-      const target = satisfactionTarget(priceRatio(b, prices));
+      const target = satisfactionTarget(priceRatio(b, prices), staffingRatioFor(b.staffCount ?? 0, building));
       const satisfaction = stepSatisfaction(b.satisfaction ?? SATISFACTION_START, target);
       const trafficHistory = [...(b.trafficHistory ?? []), { day: newDay, visitors }].slice(-30);
       return { ...b, dailyEarnings: revenue, satisfaction, trafficHistory };

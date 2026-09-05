@@ -18,7 +18,7 @@ export function Hiring() {
         <div>
           <h1 className="text-[28px] font-extrabold tracking-tight text-ink">Hiring</h1>
           <p className="mt-1 text-[14px] text-ink-faint">
-            Hire staff to grow how many customers each business can serve
+            Hire staff to boost customer satisfaction at each business
           </p>
         </div>
         <StatPill icon={Users}>{totalStaff}</StatPill>

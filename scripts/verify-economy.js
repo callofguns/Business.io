@@ -24,6 +24,7 @@ const { STOCKS, stockById } = await import("../src/data/stocks.js");
 const { RIVALS, rivalById } = await import("../src/data/rivals.js");
 const { LOAN_PRODUCT } = await import("../src/data/loanProduct.js");
 const { SAVINGS_PRODUCT } = await import("../src/data/savingsProduct.js");
+const { EQUIPMENT, equipmentFor, equipmentItemById } = await import("../src/data/equipment.js");
 const {
   expectedDailyRevenue,
   expectedDailyVisitors,
@@ -69,6 +70,10 @@ const {
   savingsInterest,
   clampAutoDepositPercent,
   computeAutoDeposit,
+  capacityFromEquipment,
+  staffingRatioFor,
+  staffSatisfactionBonus,
+  staffSatisfactionBonusFor,
 } = await import("../src/lib/economy.js");
 const { weekdayIndex } = await import("../src/lib/format.js");
 
@@ -250,10 +255,8 @@ section("startBusiness guards");
     afterStart.bankBalance === balanceBefore - shopCost
   );
   const biz = afterStart.businesses[0];
-  check(
-    "currentCapacity set to half building max",
-    biz.currentCapacity === Math.max(8, Math.round(cheapestRetail.customerCapacity * 0.5))
-  );
+  check("currentCapacity starts at 0", biz.currentCapacity === 0);
+  check("equipment starts empty", Object.keys(biz.equipment ?? {}).length === 0);
   check("starts with no staff hired", biz.staffCount === 0);
   check("starts at neutral satisfaction (50)", biz.satisfaction === 50);
   check("starts with no active promotion", biz.promotionEndDay === null);
@@ -278,6 +281,21 @@ section("startBusiness guards");
   check(
     "office business started",
     useGameStore.getState().businesses.length === 2
+  );
+
+  // Every later section in this script leans on these two businesses
+  // actually earning revenue -- and revenue is 0 at 0 capacity now (Stage
+  // 13). Buy real equipment for both, the same way a player would, rather
+  // than special-casing a synthetic capacity anywhere in the test.
+  const shopBiz = useGameStore.getState().businesses.find((b) => b.name === "Test Shop");
+  const agencyBiz = useGameStore.getState().businesses.find((b) => b.name === "Test Agency");
+  useGameStore.getState().buyEquipment({ businessId: shopBiz.id, equipmentId: "shop-shelving-system" });
+  useGameStore.getState().buyEquipment({ businessId: agencyBiz.id, equipmentId: "agency-server-rack" });
+  const equipped = useGameStore.getState().businesses;
+  check(
+    "equipment purchases actually raised capacity for both test businesses",
+    equipped.find((b) => b.name === "Test Shop").currentCapacity === 15 &&
+      equipped.find((b) => b.name === "Test Agency").currentCapacity === 15
   );
 }
 
@@ -423,27 +441,30 @@ section("Hiring (hireStaff / fireStaff)");
   const hire = staffHireCost(biz, building);
   const balanceBefore = s.bankBalance;
 
+  const capacityBeforeHire = biz.currentCapacity;
   s.hireStaff({ businessId: biz.id });
   const after = useGameStore.getState();
   const bizAfter = after.businesses.find((b) => b.id === biz.id);
   check("hire fee deducted", after.bankBalance === balanceBefore - hire.fee);
   check("staffCount incremented", bizAfter.staffCount === 1);
-  check("capacity increased to match staffCount", bizAfter.currentCapacity === hire.nextCapacity);
+  check("hiring no longer touches currentCapacity (Stage 13)", bizAfter.currentCapacity === capacityBeforeHire);
 
-  // fire that hire back off, confirm no refund of the fee but capacity/count revert
+  // fire that hire back off, confirm no refund of the fee but staffCount reverts
   const balanceBeforeFire = after.bankBalance;
   s.fireStaff({ businessId: biz.id });
   const afterFire = useGameStore.getState();
   const bizAfterFire = afterFire.businesses.find((b) => b.id === biz.id);
   check("staffCount decremented", bizAfterFire.staffCount === 0);
-  check("capacity reverted", bizAfterFire.currentCapacity === biz.currentCapacity);
+  check("firing no longer touches currentCapacity (Stage 13)", bizAfterFire.currentCapacity === capacityBeforeHire);
   check("no refund on firing", afterFire.bankBalance === balanceBeforeFire);
 
   // firing with nobody hired is a no-op
   s.fireStaff({ businessId: biz.id });
   check("firing with no staff is a no-op", useGameStore.getState().businesses.find((b) => b.id === biz.id).staffCount === 0);
 
-  // hire repeatedly until at max capacity, then confirm hiring further is a no-op
+  // hire repeatedly until at maxStaffFor, then confirm hiring further is a
+  // no-op -- maxStaffFor is now a satisfaction-staffing cap, unrelated to
+  // capacity, so currentCapacity must stay untouched throughout.
   let guard = 0;
   while (guard++ < 50) {
     const cur = useGameStore.getState().businesses.find((b) => b.id === biz.id);
@@ -452,7 +473,7 @@ section("Hiring (hireStaff / fireStaff)");
   }
   const maxed = useGameStore.getState().businesses.find((b) => b.id === biz.id);
   check("staffCount clamps at maxStaffFor(building)", maxed.staffCount === maxStaffFor(building));
-  check("capacity clamps exactly at building max", maxed.currentCapacity === building.customerCapacity);
+  check("currentCapacity untouched by hiring to the staff cap", maxed.currentCapacity === capacityBeforeHire);
 
   const balanceAtMax = useGameStore.getState().bankBalance;
   useGameStore.getState().hireStaff({ businessId: biz.id });
@@ -483,9 +504,147 @@ section("Hiring (hireStaff / fireStaff)");
 }
 
 // ---------------------------------------------------------------------
+section("Equipment (Stage 13: capacity)");
+{
+  // Catalog integrity
+  const types = ["Small Shop", "Small Cafe", "Small Web Design Agency"];
+  check("4 equipment items per business type", types.every((t) => EQUIPMENT[t].length === 4));
+  check(
+    "capacities are exactly 8/15/25/40 for every type",
+    types.every((t) => EQUIPMENT[t].map((i) => i.capacity).sort((a, b) => a - b).join(",") === "8,15,25,40")
+  );
+  check(
+    "cost = capacity * 450, sellValue = 60% of cost",
+    types.every((t) =>
+      EQUIPMENT[t].every((item) => item.cost === item.capacity * 450 && item.sellValue === Math.round(item.cost * 0.6))
+    )
+  );
+  check("equipmentItemById finds a real item", equipmentItemById("Small Shop", "shop-cash-register")?.capacity === 8);
+  check("equipmentItemById returns null for an unknown id", equipmentItemById("Small Shop", "nope") === null);
+  check("equipmentFor an unknown type returns []", equipmentFor("Nonexistent Type").length === 0);
+
+  // Pure capacityFromEquipment checks
+  const cheapestRetailBuilding = buildingById(
+    useGameStore.getState().businesses.find((b) => b.name === "Test Shop").buildingId
+  );
+  check(
+    "capacityFromEquipment sums quantity * capacity across owned items",
+    capacityFromEquipment({ "shop-cash-register": 2, "shop-shelving-system": 1 }, "Small Shop", cheapestRetailBuilding) ===
+      Math.min(cheapestRetailBuilding.customerCapacity, 2 * 8 + 15)
+  );
+  check("capacityFromEquipment is 0 with nothing owned", capacityFromEquipment({}, "Small Shop", cheapestRetailBuilding) === 0);
+  check(
+    "capacityFromEquipment caps at the building's customerCapacity",
+    capacityFromEquipment(
+      { "shop-cash-register": 1, "shop-shelving-system": 1, "shop-self-checkout": 1, "shop-storeroom": 1 },
+      "Small Shop",
+      cheapestRetailBuilding
+    ) === cheapestRetailBuilding.customerCapacity
+  );
+
+  // Store-level guards and happy paths -- exercised on "Test Shop", which
+  // already owns one shop-shelving-system (capacity 15) from the
+  // startBusiness section above. Every step here is undone by the end so
+  // later sections see Test Shop back at exactly that same baseline.
+  const shop = useGameStore.getState().businesses.find((b) => b.name === "Test Shop");
+  const building = buildingById(shop.buildingId);
+  const capacityBefore = shop.currentCapacity;
+  check("Test Shop starts this section at capacity 15", capacityBefore === 15);
+
+  const bankBeforeGuards = useGameStore.getState().bankBalance;
+  useGameStore.getState().buyEquipment({ businessId: shop.id, equipmentId: "nonexistent-item" });
+  useGameStore.getState().sellEquipment({ businessId: shop.id, equipmentId: "shop-cash-register" });
+  check(
+    "buy/sell no-op for an unknown item or nothing owned",
+    useGameStore.getState().bankBalance === bankBeforeGuards &&
+      useGameStore.getState().businesses.find((b) => b.id === shop.id).currentCapacity === capacityBefore
+  );
+
+  useGameStore.setState({ bankBalance: 0 });
+  useGameStore.getState().buyEquipment({ businessId: shop.id, equipmentId: "shop-cash-register" });
+  check(
+    "buyEquipment is a no-op when unaffordable",
+    useGameStore.getState().businesses.find((b) => b.id === shop.id).currentCapacity === capacityBefore
+  );
+  useGameStore.setState({ bankBalance: 500000 });
+
+  // buy #1: 15 -> 23
+  const bankBeforeBuy1 = useGameStore.getState().bankBalance;
+  useGameStore.getState().buyEquipment({ businessId: shop.id, equipmentId: "shop-cash-register" });
+  const s1 = useGameStore.getState();
+  const biz1 = s1.businesses.find((b) => b.id === shop.id);
+  const item = equipmentItemById("Small Shop", "shop-cash-register");
+  check(
+    "buyEquipment debits cost, raises capacity, records quantity",
+    s1.bankBalance === bankBeforeBuy1 - item.cost && biz1.currentCapacity === 23 && biz1.equipment["shop-cash-register"] === 1
+  );
+  check("buy news entry recorded", s1.news[0].icon === "package" && s1.news[0].title.includes("bought"));
+
+  // buy #2: 23 -> capped at building max (24), not 31
+  useGameStore.getState().buyEquipment({ businessId: shop.id, equipmentId: "shop-cash-register" });
+  const biz2 = useGameStore.getState().businesses.find((b) => b.id === shop.id);
+  check(
+    "a second purchase caps capacity at the building max, not the raw sum",
+    biz2.currentCapacity === building.customerCapacity && biz2.equipment["shop-cash-register"] === 2
+  );
+
+  // now at max capacity -- buying anything else is blocked
+  const bankAtMax = useGameStore.getState().bankBalance;
+  useGameStore.getState().buyEquipment({ businessId: shop.id, equipmentId: "shop-self-checkout" });
+  check(
+    "buyEquipment is blocked once already at the building's max capacity",
+    useGameStore.getState().bankBalance === bankAtMax &&
+      !("shop-self-checkout" in useGameStore.getState().businesses.find((b) => b.id === shop.id).equipment)
+  );
+
+  // sell #1: 24 -> 23, credited at sellValue (not cost)
+  const bankBeforeSell1 = useGameStore.getState().bankBalance;
+  useGameStore.getState().sellEquipment({ businessId: shop.id, equipmentId: "shop-cash-register" });
+  const s3 = useGameStore.getState();
+  const biz3 = s3.businesses.find((b) => b.id === shop.id);
+  check(
+    "sellEquipment credits sellValue, lowers capacity, decrements quantity",
+    s3.bankBalance === bankBeforeSell1 + item.sellValue && biz3.currentCapacity === 23 && biz3.equipment["shop-cash-register"] === 1
+  );
+  check("sell news entry recorded", s3.news[0].icon === "package" && s3.news[0].title.includes("sold"));
+
+  // sell #2: back to the section's starting baseline, quantity key removed entirely
+  useGameStore.getState().sellEquipment({ businessId: shop.id, equipmentId: "shop-cash-register" });
+  const biz4 = useGameStore.getState().businesses.find((b) => b.id === shop.id);
+  check(
+    "selling the last unit removes the equipment key and restores the original capacity",
+    biz4.currentCapacity === capacityBefore && !("shop-cash-register" in biz4.equipment)
+  );
+
+  useGameStore.getState().sellEquipment({ businessId: shop.id, equipmentId: "shop-cash-register" });
+  check(
+    "selling with none owned is a no-op",
+    useGameStore.getState().businesses.find((b) => b.id === shop.id).currentCapacity === capacityBefore
+  );
+}
+
+// ---------------------------------------------------------------------
 section("Satisfaction (reputation) rules");
 {
-  // Pure formula checks
+  // Pure formula checks -- staffing term (Stage 13)
+  check("staffSatisfactionBonus(0.5) is neutral (0) -- today's exact behavior", staffSatisfactionBonus(0.5) === 0);
+  check("staffSatisfactionBonus(0) is -10 (unstaffed)", staffSatisfactionBonus(0) === -10);
+  check("staffSatisfactionBonus(1) is +10 (fully staffed)", staffSatisfactionBonus(1) === 10);
+  {
+    const testBuilding = buildingById(useGameStore.getState().businesses.find((b) => b.name === "Test Shop").buildingId);
+    const cap = maxStaffFor(testBuilding);
+    check("maxStaffFor = ceil(customerCapacity / 10), at least 1", cap === Math.max(1, Math.ceil(testBuilding.customerCapacity / 10)));
+    check("staffingRatioFor(0, building) is 0", staffingRatioFor(0, testBuilding) === 0);
+    check("staffingRatioFor(maxStaffFor, building) is 1", staffingRatioFor(cap, testBuilding) === 1);
+    check("staffingRatioFor clamps above maxStaffFor to 1", staffingRatioFor(cap + 5, testBuilding) === 1);
+    check(
+      "staffSatisfactionBonusFor matches staffSatisfactionBonus(staffingRatioFor(...))",
+      staffSatisfactionBonusFor(2, testBuilding) === staffSatisfactionBonus(staffingRatioFor(2, testBuilding))
+    );
+  }
+
+  // Pure formula checks -- pricing term (unchanged since before Stage 13;
+  // satisfactionTarget's default staffingRatio=0.5 keeps these exact)
   check("at-market ratio (1) targets the ceiling (70)", satisfactionTarget(1) === 70);
   check("underpriced (ratio < 1) also targets the ceiling", satisfactionTarget(0.5) === 70);
   check("50% overpriced (ratio 1.5) targets the floor (20)", satisfactionTarget(1.5) === 20);
@@ -498,15 +657,18 @@ section("Satisfaction (reputation) rules");
 
   // Integration: "Test Shop" has never had a custom price set (that only
   // happens in the setProductPrice section below, which runs after this
-  // one), so its price ratio has been exactly 1 -- and its target exactly
-  // 70 -- every day since it opened. Compare against that day count rather
-  // than a hardcoded number so this stays correct regardless of how many
+  // one), so its price ratio has been exactly 1 the whole time -- and it's
+  // back to 0 staff (the Hiring section above fires everyone back off
+  // before this one runs), so its target has been a constant 70 - 10 = 60
+  // (SATISFACTION_TARGET_AT_MARKET plus the 0-staff satisfaction penalty)
+  // every day since it opened. Compare against that day count rather than
+  // a hardcoded number so this stays correct regardless of how many
   // nextDay() calls earlier sections happen to make.
   const s = useGameStore.getState();
   const biz = s.businesses.find((b) => b.type === "Small Shop");
-  const expected = Math.min(70, 50 + (s.day - biz.startedDay));
+  const expected = Math.min(60, 50 + (s.day - biz.startedDay));
   check(
-    "satisfaction has drifted up toward the at-market target over elapsed days",
+    "satisfaction has drifted up toward the (price + 0-staff) target over elapsed days",
     biz.satisfaction === expected
   );
 }
@@ -1578,6 +1740,24 @@ section("30-day soak (no NaN/Infinity, news capped)");
       const count = b.staffCount ?? 0;
       return building && count >= 0 && count <= maxStaffFor(building);
     })
+  );
+  check(
+    "every business's currentCapacity is finite, non-negative, and never exceeds its building's max",
+    s.businesses.every((b) => {
+      const building = buildingById(b.buildingId);
+      return building && isFinite_(b.currentCapacity) && b.currentCapacity >= 0 && b.currentCapacity <= building.customerCapacity;
+    })
+  );
+  check(
+    "every business's currentCapacity matches capacityFromEquipment(equipment) exactly",
+    s.businesses.every((b) => {
+      const building = buildingById(b.buildingId);
+      return building && b.currentCapacity === capacityFromEquipment(b.equipment, b.type, building);
+    })
+  );
+  check(
+    "equipment holdings are finite non-negative integers for every business",
+    s.businesses.every((b) => Object.values(b.equipment ?? {}).every((qty) => Number.isInteger(qty) && qty >= 0))
   );
   check(
     "all stock prices finite, positive, and at least the floor after the soak",

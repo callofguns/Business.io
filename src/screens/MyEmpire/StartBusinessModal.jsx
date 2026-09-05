@@ -11,7 +11,6 @@ import { useGameStore, vacantBuildingsFor } from "../../state/gameStore";
 import { useCurrencyStore } from "../../state/currencyStore";
 import { useUiStore } from "../../state/uiStore";
 import { formatMoney } from "../../lib/format";
-import { expectedDailyRevenue, startingCapacity } from "../../lib/economy";
 import { STARTER_BUSINESS_OPTIONS } from "../../data/businessTypes";
 
 export function StartBusinessModal({ open, onClose }) {
@@ -21,7 +20,6 @@ export function StartBusinessModal({ open, onClose }) {
 
   const bankBalance = useGameStore((s) => s.bankBalance);
   const startBusiness = useGameStore((s) => s.startBusiness);
-  const productPrices = useGameStore((s) => s.productPrices);
   // Select the raw, store-stable arrays (zustand only gives us a new
   // reference for these when they actually change) and derive the vacant
   // list with useMemo, rather than calling vacantBuildingsFor() inside the
@@ -132,37 +130,30 @@ export function StartBusinessModal({ open, onClose }) {
             </EmptyState>
           ) : (
             <div className="flex flex-col gap-2.5">
-              {vacantBuildings.map((building) => {
-                const preview = { type: selectedType, currentCapacity: startingCapacity(building) };
-                const estimate = expectedDailyRevenue(preview, building, productPrices);
-                return (
-                  <button
-                    key={building.id}
-                    type="button"
-                    onClick={() => setSelectedBuildingId(building.id)}
-                    className="flex items-center gap-3 rounded-2xl border border-border-strong bg-surface px-4 py-3 text-left transition-colors hover:bg-surface-sunken"
-                  >
-                    <BuildingTypeIcon type={building.type} sizeClass="h-12 w-12 rounded-xl" iconSize={22} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[14px] font-bold text-ink">{building.name}</p>
-                      <p className="text-[12px] text-ink-faint">
-                        {building.city} · {building.area}
-                      </p>
-                      <div className="mt-1 flex items-center gap-3">
-                        <IconRow icon={Activity} className="text-[11.5px]">
-                          Traffic {building.trafficIndex}
-                        </IconRow>
-                        <IconRow icon={Gauge} className="text-[11.5px]">
-                          {building.customerCapacity}/hr
-                        </IconRow>
-                      </div>
-                    </div>
-                    <p className="shrink-0 text-[13px] font-bold text-good-600">
-                      ≈ {formatMoney(estimate, { currency })}/day
+              {vacantBuildings.map((building) => (
+                <button
+                  key={building.id}
+                  type="button"
+                  onClick={() => setSelectedBuildingId(building.id)}
+                  className="flex items-center gap-3 rounded-2xl border border-border-strong bg-surface px-4 py-3 text-left transition-colors hover:bg-surface-sunken"
+                >
+                  <BuildingTypeIcon type={building.type} sizeClass="h-12 w-12 rounded-xl" iconSize={22} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[14px] font-bold text-ink">{building.name}</p>
+                    <p className="text-[12px] text-ink-faint">
+                      {building.city} · {building.area}
                     </p>
-                  </button>
-                );
-              })}
+                    <div className="mt-1 flex items-center gap-3">
+                      <IconRow icon={Activity} className="text-[11.5px]">
+                        Traffic {building.trafficIndex}
+                      </IconRow>
+                      <IconRow icon={Gauge} className="text-[11.5px]">
+                        {building.customerCapacity}/hr max
+                      </IconRow>
+                    </div>
+                  </div>
+                </button>
+              ))}
             </div>
           )}
         </div>
