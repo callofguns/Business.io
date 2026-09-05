@@ -16,6 +16,7 @@ import { formatMoney } from "../../lib/format";
 import { buildingById } from "../../data/buildings";
 import { dailyWagePerStaff, promotionCost, isPromotionActive } from "../../lib/economy";
 import { TrafficChart } from "./TrafficChart";
+import { EquipmentPanel } from "./EquipmentPanel";
 import { ProductsModal } from "../MyEmpire/ProductsModal";
 
 function satisfactionTone(score) {
@@ -139,6 +140,8 @@ export function BusinessDetail() {
         />
       </div>
 
+      <EquipmentPanel business={business} building={building} />
+
       <Card className="mt-4">
         <SectionHeading icon={TrendingUp} title="Traffic" subtitle="Daily visitors, most recent days" />
         <TrafficChart history={business.trafficHistory ?? []} />
@@ -153,9 +156,10 @@ export function BusinessDetail() {
             subtitle={satisfactionLabel(satisfaction)}
           />
           <p className="text-[12.5px] text-ink-faint">
-            Drifts a little every day toward a target set by your pricing — sitting at or below
-            market price builds it up, overcharging wears it down. Higher satisfaction brings in
-            more customers on top of pricing itself.
+            Drifts a little every day toward a target set by your pricing and your staffing —
+            sitting at or below market price builds it up, overcharging wears it down; a
+            well-staffed business builds it up further, an understaffed one drags it down. Higher
+            satisfaction brings in more customers on top of pricing itself.
           </p>
           <div
             role="progressbar"
@@ -215,7 +219,7 @@ export function BusinessDetail() {
 
       {building ? (
         <Card className="mt-4">
-          <SectionHeading icon={Users} title="Staff" subtitle="Hire employees to grow how many customers you can serve" />
+          <SectionHeading icon={Users} title="Staff" subtitle="Hire employees to boost customer satisfaction" />
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-[12.5px] text-ink-faint">
               {staffCount} staff hired · {formatMoney(staffCount * dailyWage, { currency })}/day in wages

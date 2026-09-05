@@ -2,6 +2,7 @@ import { BUSINESS_TYPES } from "../data/businessTypes";
 import { STOCKS } from "../data/stocks";
 import { BUILDINGS, buildingById } from "../data/buildings";
 import { RIVALS } from "../data/rivals";
+import { equipmentFor } from "../data/equipment";
 
 // --- Revenue model -----------------------------------------------------
 //
@@ -171,10 +172,16 @@ export function demandMultiplier(business, productPrices) {
 //
 // A slow-moving 0-100 score, separate from the immediate price->demand
 // curve above. Each day it drifts by SATISFACTION_STEP toward a target set
-// by how the business is currently priced: at or below market it drifts up
+// by how the business is currently priced (at or below market it drifts up
 // toward a happy ceiling; the more it overcharges, the lower the target
-// falls (floored, not straight to 0 -- one bad pricing day doesn't tank
-// years of goodwill). It then feeds back into visitor volume as a second,
+// falls, floored not zeroed -- one bad pricing day doesn't tank years of
+// goodwill) *and*, since Stage 13, by how well-staffed it is -- capacity no
+// longer comes from staff (see capacityFromEquipment below), so hiring's
+// job now is service quality instead. `staffingRatio` defaults to 0.5 (the
+// same "half-staffed" point the bonus is centered on, see below) so every
+// existing caller that doesn't pass one -- pure-formula tests, the
+// Magnitude table's synthetic businesses -- keeps behaving exactly as
+// before this stage. It then feeds back into visitor volume as a second,
 // smaller multiplier on top of the pricing-driven demand curve -- reputation
 // matters, but pricing-of-the-day still dominates.
 export const SATISFACTION_MIN = 0;
@@ -183,10 +190,30 @@ export const SATISFACTION_START = 50;
 export const SATISFACTION_STEP = 1; // points/day drift toward target
 export const SATISFACTION_TARGET_AT_MARKET = 70;
 export const SATISFACTION_TARGET_FLOOR = 20;
+export const STAFF_SATISFACTION_SWING = 20; // +/-10 around the 0.5 (half-staffed) baseline
 
-export function satisfactionTarget(ratio) {
+export function satisfactionTarget(ratio, staffingRatio = 0.5) {
   const overchargePenalty = Math.max(0, ratio - 1) * 100;
-  return Math.max(SATISFACTION_TARGET_FLOOR, SATISFACTION_TARGET_AT_MARKET - overchargePenalty);
+  const priceComponent = Math.max(SATISFACTION_TARGET_FLOOR, SATISFACTION_TARGET_AT_MARKET - overchargePenalty);
+  return priceComponent + staffSatisfactionBonus(staffingRatio);
+}
+
+// How well-staffed a business is, 0 (no staff) to 1 (at maxStaffFor) --
+// shared by nextDay() (feeds satisfactionTarget) and the Hiring UI (to
+// display the same bonus/penalty a hire/fire would apply).
+export function staffingRatioFor(staffCount, building) {
+  return Math.min(1, staffCount / maxStaffFor(building));
+}
+
+// staffingRatio in, not staffCount -- callers that already have a ratio
+// (satisfactionTarget) skip recomputing it; UI callers use
+// staffSatisfactionBonusFor below instead.
+export function staffSatisfactionBonus(staffingRatio) {
+  return Math.round((staffingRatio - 0.5) * STAFF_SATISFACTION_SWING);
+}
+
+export function staffSatisfactionBonusFor(staffCount, building) {
+  return staffSatisfactionBonus(staffingRatioFor(staffCount, building));
 }
 
 export function stepSatisfaction(current, target) {
@@ -247,32 +274,23 @@ export function isTaxPaymentDue(day, lastTaxPaymentDay) {
 
 // --- Hiring / staff ---------------------------------------------------
 //
-// A business starts able to serve only half of its building's max capacity
-// (startingCapacity below) and grows toward that max by hiring staff on the
-// Hiring screen. Staff are a flat headcount (no named roles) -- each hire
-// adds STAFF_CAPACITY_STEP capacity and costs an hourly wage, paid every
-// day the business is open (see dailyWagePerStaff/gameStore.nextDay), plus
-// a one-time hiring fee. Capacity is always *derived* from staffCount
-// (capacityForStaff) rather than stored as an independent running total, so
-// hiring and firing can never drift out of sync with each other -- firing
-// is just staffCount - 1, capacity recomputes on its own.
+// Staff are a flat headcount (no named roles) -- each hire costs an hourly
+// wage, paid every day the business is open (see dailyWagePerStaff/
+// gameStore.nextDay), plus a one-time hiring fee. As of Stage 13, staff no
+// longer drive capacity (see "Equipment" below for that) -- hiring's job is
+// service quality: maxStaffFor(building) sizes a "how well-staffed is this
+// business" ratio that feeds satisfactionTarget's staffing bonus.
 export const STAFF_HOURLY_WAGE = 18;
-export const STAFF_CAPACITY_STEP = 5;
 export const STAFF_HIRE_FEE_MULTIPLIER = 10; // one-time fee = 10x that hire's daily wage
+export const CAPACITY_PER_STAFF_SLOT = 10; // divisor for maxStaffFor, unrelated to actual capacity now
 
-export function startingCapacity(building) {
-  return Math.max(8, Math.round(building.customerCapacity * 0.5));
-}
-
-export function capacityForStaff(building, staffCount) {
-  return Math.min(building.customerCapacity, startingCapacity(building) + staffCount * STAFF_CAPACITY_STEP);
-}
-
-// How many staff a business can usefully hire before it's already serving
-// its building's full capacity -- hiring past this would only add wage cost
-// for no capacity gain, so hireStaff() refuses past this point.
+// How many staff a business can usefully hire, sized off the building --
+// bigger buildings support a bigger team. Coincidentally close to the old
+// capacity-based range (roughly 3-9 across the catalog) since the divisor
+// was chosen to match, so hiring's *pacing* doesn't shift even though its
+// effect (satisfaction, not capacity) does.
 export function maxStaffFor(building) {
-  return Math.ceil((building.customerCapacity - startingCapacity(building)) / STAFF_CAPACITY_STEP);
+  return Math.max(1, Math.ceil(building.customerCapacity / CAPACITY_PER_STAFF_SLOT));
 }
 
 export function dailyWagePerStaff(type) {
@@ -293,8 +311,7 @@ export function totalDailyWages(businesses) {
   }, 0);
 }
 
-// Returns null once the business is already staffed up to its building's
-// max capacity.
+// Returns null once the business is already staffed up to maxStaffFor.
 export function staffHireCost(business, building) {
   const staffCount = business.staffCount ?? 0;
   if (staffCount >= maxStaffFor(building)) return null;
@@ -302,20 +319,33 @@ export function staffHireCost(business, building) {
     fee: hireFee(business.type),
     dailyWage: dailyWagePerStaff(business.type),
     nextStaffCount: staffCount + 1,
-    nextCapacity: capacityForStaff(building, staffCount + 1),
   };
 }
 
 // Returns null when there's no staff left to let go. No refund of the
 // original hire fee (it was a sunk recruiting/training cost) -- only the
-// ongoing wage stops.
-export function staffFireResult(business, building) {
+// ongoing wage stops. Takes `building` for signature parity with
+// staffHireCost, though firing no longer needs it directly.
+export function staffFireResult(business, _building) {
   const staffCount = business.staffCount ?? 0;
   if (staffCount <= 0) return null;
-  return {
-    nextStaffCount: staffCount - 1,
-    nextCapacity: capacityForStaff(building, staffCount - 1),
-  };
+  return { nextStaffCount: staffCount - 1 };
+}
+
+// --- Equipment (Stage 13) -----------------------------------------------
+//
+// Capacity now comes entirely from purchasable equipment (data/equipment.js),
+// not from staff -- a business starts at 0 capacity and grows only by
+// buying equipment, capped at the building's own customerCapacity. Kept as
+// a *stored* field on the business (currentCapacity), recomputed and
+// re-stored by buyEquipment/sellEquipment -- the same "derived but kept in
+// lockstep by the action" pattern hireStaff/fireStaff used for capacity
+// before this stage.
+export function capacityFromEquipment(equipment, businessType, building) {
+  const total = equipmentFor(businessType).reduce((sum, item) => {
+    return sum + (equipment?.[item.id] ?? 0) * item.capacity;
+  }, 0);
+  return Math.min(building.customerCapacity, total);
 }
 
 // --- Stock market (Finance Manager) ------------------------------------
