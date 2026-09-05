@@ -4,9 +4,19 @@
 // mirror the actual GitHub release notes at
 // https://github.com/callofguns/Business.io/releases -- only released
 // versions belong here, nothing still sitting on `dev` unreleased.
-export const APP_VERSION = "v0.3.3-beta";
+export const APP_VERSION = "v0.3.4-beta";
 
 export const CHANGELOG = [
+  {
+    version: "v0.3.4-beta",
+    date: "2026-09-05",
+    title: "Stage 13: Equipment",
+    notes: [
+      "Capacity now comes from equipment, not hired staff — every business starts at 0 capacity and grows by buying equipment on its Business Detail page, capped at the building's max",
+      "Hiring now boosts customer satisfaction instead of capacity — a well-staffed business builds satisfaction faster, an understaffed one drags it down",
+      "Removed the Start Business flow's per-building \"~$/day\" estimate, since a new business no longer earns anything until you equip it",
+    ],
+  },
   {
     version: "v0.3.3-beta",
     date: "2026-09-04",
