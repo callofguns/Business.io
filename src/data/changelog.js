@@ -4,9 +4,19 @@
 // mirror the actual GitHub release notes at
 // https://github.com/callofguns/Business.io/releases -- only released
 // versions belong here, nothing still sitting on `dev` unreleased.
-export const APP_VERSION = "v0.3.4-beta";
+export const APP_VERSION = "v0.3.5-beta";
 
 export const CHANGELOG = [
+  {
+    version: "v0.3.5-beta",
+    date: "2026-09-08",
+    title: "Stage 14: Named Staff",
+    notes: [
+      "Hiring now creates individually-named employees instead of just a headcount — each hire joins a specific role",
+      "Every business type has two roles with their own hiring caps: Shop → Cashier/Stocker, Cafe → Barista/Cashier, Web Agency → Designer/Developer",
+      "The Hiring screen shows each business's roster grouped by role, so you can hire or let go one named person at a time",
+    ],
+  },
   {
     version: "v0.3.4-beta",
     date: "2026-09-05",
