@@ -67,7 +67,7 @@ export function BusinessDetail() {
   const acquisition = acquiredBuildings.find((a) => a.buildingId === business.buildingId);
   const satisfaction = business.satisfaction ?? 50;
 
-  const staffCount = business.staffCount ?? 0;
+  const staffCount = business.employees?.length ?? 0;
   const dailyWage = dailyWagePerStaff(business.type);
 
   const promoActive = isPromotionActive(business, day);

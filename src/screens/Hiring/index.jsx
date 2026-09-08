@@ -10,7 +10,7 @@ export function Hiring() {
   const businesses = useGameStore((s) => s.businesses);
   const setScreen = useUiStore((s) => s.setScreen);
 
-  const totalStaff = businesses.reduce((sum, b) => sum + (b.staffCount ?? 0), 0);
+  const totalStaff = businesses.reduce((sum, b) => sum + (b.employees?.length ?? 0), 0);
 
   return (
     <Page>

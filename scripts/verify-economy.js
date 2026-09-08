@@ -29,8 +29,8 @@ const {
   expectedDailyRevenue,
   expectedDailyVisitors,
   staffHireCost,
-  staffFireResult,
   maxStaffFor,
+  roleMaxFor,
   dailyWagePerStaff,
   totalDailyWages,
   demandMultiplier,
@@ -257,7 +257,7 @@ section("startBusiness guards");
   const biz = afterStart.businesses[0];
   check("currentCapacity starts at 0", biz.currentCapacity === 0);
   check("equipment starts empty", Object.keys(biz.equipment ?? {}).length === 0);
-  check("starts with no staff hired", biz.staffCount === 0);
+  check("starts with no staff hired", Array.isArray(biz.employees) && biz.employees.length === 0);
   check("starts at neutral satisfaction (50)", biz.satisfaction === 50);
   check("starts with no active promotion", biz.promotionEndDay === null);
   check("starts with empty traffic history", Array.isArray(biz.trafficHistory) && biz.trafficHistory.length === 0);
@@ -423,84 +423,107 @@ section("Magnitude table (starter vs top-end, cross-type spread)");
 }
 
 // ---------------------------------------------------------------------
-section("Hiring (hireStaff / fireStaff)");
+section("Hiring (Stage 14: named staff + roles)");
 {
   const s = useGameStore.getState();
   const biz = s.businesses.find((b) => b.type === "Small Shop");
   const building = buildingById(biz.buildingId);
+  const roles = BUSINESS_TYPES["Small Shop"].roles;
+  const NAME_PATTERN = /^[A-Za-z]+ [A-Za-z]+$/;
 
+  check("Small Shop has exactly 2 roles: Cashier, Stocker", roles.length === 2 && roles.includes("Cashier") && roles.includes("Stocker"));
   check(
     "dailyWagePerStaff = hourly rate * operatingHours",
     dailyWagePerStaff("Small Shop") === Math.round(BUSINESS_TYPES["Small Shop"].operatingHours * 18)
   );
+  check("roleMaxFor is half of maxStaffFor, rounded up", roleMaxFor(building) === Math.max(1, Math.ceil(maxStaffFor(building) / 2)));
+
+  // hiring into an unknown role is a no-op
+  const balanceBeforeGuard = s.bankBalance;
+  s.hireStaff({ businessId: biz.id, role: "Manager" });
   check(
-    "staffFireResult is null with nothing hired yet",
-    staffFireResult({ ...biz, staffCount: 0 }, building) === null
+    "hiring an unknown role is a no-op",
+    useGameStore.getState().businesses.find((b) => b.id === biz.id).employees.length === 0 &&
+      useGameStore.getState().bankBalance === balanceBeforeGuard
   );
 
-  const hire = staffHireCost(biz, building);
-  const balanceBefore = s.bankBalance;
+  // firing an employee that doesn't exist is a no-op
+  s.fireStaff({ businessId: biz.id, employeeId: "emp-does-not-exist" });
+  check("firing an unknown employeeId is a no-op", useGameStore.getState().businesses.find((b) => b.id === biz.id).employees.length === 0);
 
+  // happy path: hire a Cashier
+  const hire = staffHireCost(biz, building, "Cashier");
+  const balanceBefore = s.bankBalance;
   const capacityBeforeHire = biz.currentCapacity;
-  s.hireStaff({ businessId: biz.id });
+  s.hireStaff({ businessId: biz.id, role: "Cashier" });
   const after = useGameStore.getState();
   const bizAfter = after.businesses.find((b) => b.id === biz.id);
+  const cashier = bizAfter.employees[0];
   check("hire fee deducted", after.bankBalance === balanceBefore - hire.fee);
-  check("staffCount incremented", bizAfter.staffCount === 1);
-  check("hiring no longer touches currentCapacity (Stage 13)", bizAfter.currentCapacity === capacityBeforeHire);
+  check("employees gained one entry", bizAfter.employees.length === 1);
+  check("the new employee has a real generated name and the requested role", NAME_PATTERN.test(cashier.name) && cashier.role === "Cashier");
+  check("hiring doesn't touch currentCapacity (Stage 13 still holds)", bizAfter.currentCapacity === capacityBeforeHire);
+  check("hire news entry names the employee", after.news[0].title.includes(cashier.name) && after.news[0].title.includes("Cashier"));
 
-  // fire that hire back off, confirm no refund of the fee but staffCount reverts
+  // fire that specific employee back off -- no refund, capacity untouched
   const balanceBeforeFire = after.bankBalance;
-  s.fireStaff({ businessId: biz.id });
+  s.fireStaff({ businessId: biz.id, employeeId: cashier.id });
   const afterFire = useGameStore.getState();
   const bizAfterFire = afterFire.businesses.find((b) => b.id === biz.id);
-  check("staffCount decremented", bizAfterFire.staffCount === 0);
-  check("firing no longer touches currentCapacity (Stage 13)", bizAfterFire.currentCapacity === capacityBeforeHire);
+  check("employees list is empty again", bizAfterFire.employees.length === 0);
+  check("firing doesn't touch currentCapacity", bizAfterFire.currentCapacity === capacityBeforeHire);
   check("no refund on firing", afterFire.bankBalance === balanceBeforeFire);
+  check("fire news entry names the employee who left", afterFire.news[0].title.includes(cashier.name));
 
-  // firing with nobody hired is a no-op
-  s.fireStaff({ businessId: biz.id });
-  check("firing with no staff is a no-op", useGameStore.getState().businesses.find((b) => b.id === biz.id).staffCount === 0);
-
-  // hire repeatedly until at maxStaffFor, then confirm hiring further is a
-  // no-op -- maxStaffFor is now a satisfaction-staffing cap, unrelated to
-  // capacity, so currentCapacity must stay untouched throughout.
+  // hire Cashiers up to roleMaxFor, confirm that role blocks further hires
+  // while the *other* role (Stocker) is unaffected -- role isolation is the
+  // key new behavior this stage adds.
+  const roleMax = roleMaxFor(building);
   let guard = 0;
   while (guard++ < 50) {
     const cur = useGameStore.getState().businesses.find((b) => b.id === biz.id);
-    if (cur.staffCount >= maxStaffFor(building)) break;
-    useGameStore.getState().hireStaff({ businessId: biz.id });
+    const cashierCount = cur.employees.filter((e) => e.role === "Cashier").length;
+    if (cashierCount >= roleMax) break;
+    useGameStore.getState().hireStaff({ businessId: biz.id, role: "Cashier" });
   }
-  const maxed = useGameStore.getState().businesses.find((b) => b.id === biz.id);
-  check("staffCount clamps at maxStaffFor(building)", maxed.staffCount === maxStaffFor(building));
-  check("currentCapacity untouched by hiring to the staff cap", maxed.currentCapacity === capacityBeforeHire);
+  const cashiersMaxed = useGameStore.getState().businesses.find((b) => b.id === biz.id);
+  const cashierCount = cashiersMaxed.employees.filter((e) => e.role === "Cashier").length;
+  check("Cashier role clamps at roleMaxFor(building)", cashierCount === roleMax);
 
   const balanceAtMax = useGameStore.getState().bankBalance;
-  useGameStore.getState().hireStaff({ businessId: biz.id });
+  useGameStore.getState().hireStaff({ businessId: biz.id, role: "Cashier" });
   check(
-    "hiring past building max is a no-op",
+    "hiring past that role's cap is a no-op",
     useGameStore.getState().bankBalance === balanceAtMax &&
-      useGameStore.getState().businesses.find((b) => b.id === biz.id).staffCount === maxed.staffCount
+      useGameStore.getState().businesses.find((b) => b.id === biz.id).employees.filter((e) => e.role === "Cashier").length === roleMax
+  );
+
+  useGameStore.getState().hireStaff({ businessId: biz.id, role: "Stocker" });
+  const withStocker = useGameStore.getState().businesses.find((b) => b.id === biz.id);
+  check(
+    "the Stocker role is still hireable even though Cashier is full",
+    withStocker.employees.filter((e) => e.role === "Stocker").length === 1 &&
+      withStocker.employees.filter((e) => e.role === "Cashier").length === roleMax
   );
 
   check(
-    "totalDailyWages sums every active business's staffCount * dailyWagePerStaff",
+    "totalDailyWages sums every active business's employees.length * dailyWagePerStaff",
     totalDailyWages(useGameStore.getState().businesses) ===
       useGameStore.getState().businesses.reduce(
-        (sum, b) => sum + (b.staffCount ?? 0) * dailyWagePerStaff(b.type),
+        (sum, b) => sum + (b.employees?.length ?? 0) * dailyWagePerStaff(b.type),
         0
       )
   );
 
-  // let the staff back go so later sections' magnitude/soak numbers aren't
-  // skewed by this section's hiring
+  // let everyone at this business go so later sections' magnitude/soak
+  // numbers aren't skewed by this section's hiring
   guard = 0;
   while (guard++ < 50) {
     const cur = useGameStore.getState().businesses.find((b) => b.id === biz.id);
-    if (cur.staffCount <= 0) break;
-    useGameStore.getState().fireStaff({ businessId: biz.id });
+    if (cur.employees.length === 0) break;
+    useGameStore.getState().fireStaff({ businessId: biz.id, employeeId: cur.employees[0].id });
   }
-  check("staff let go back to 0", useGameStore.getState().businesses.find((b) => b.id === biz.id).staffCount === 0);
+  check("all staff let go back to 0", useGameStore.getState().businesses.find((b) => b.id === biz.id).employees.length === 0);
 }
 
 // ---------------------------------------------------------------------
@@ -1696,8 +1719,8 @@ section("30-day soak (no NaN/Infinity, news capped)");
   // hire someone so wages are actually exercised through the soak, not left
   // at a permanent 0 from the Hiring section resetting back to no staff
   const soakBiz = useGameStore.getState().businesses.find((b) => b.type === "Small Shop");
-  useGameStore.getState().hireStaff({ businessId: soakBiz.id });
-  check("hired for the soak", useGameStore.getState().businesses.find((b) => b.id === soakBiz.id).staffCount === 1);
+  useGameStore.getState().hireStaff({ businessId: soakBiz.id, role: "Cashier" });
+  check("hired for the soak", useGameStore.getState().businesses.find((b) => b.id === soakBiz.id).employees.length === 1);
 
   for (let i = 0; i < 30; i++) {
     useGameStore.getState().nextDay();
@@ -1734,11 +1757,26 @@ section("30-day soak (no NaN/Infinity, news capped)");
   check("lastDaySummary.wages finite and non-negative", isFinite_(s.lastDaySummary.wages) && s.lastDaySummary.wages >= 0);
   check("wages actually charged for the hired soak business", s.lastDaySummary.wages > 0);
   check(
-    "every business's staffCount stays within [0, maxStaffFor(building)]",
+    "every business's total employee count stays within [0, maxStaffFor(building)]",
     s.businesses.every((b) => {
       const building = buildingById(b.buildingId);
-      const count = b.staffCount ?? 0;
+      const count = b.employees?.length ?? 0;
       return building && count >= 0 && count <= maxStaffFor(building);
+    })
+  );
+  check(
+    "every role's employee count stays within [0, roleMaxFor(building)], and every employee has a real name and a valid role",
+    s.businesses.every((b) => {
+      const building = buildingById(b.buildingId);
+      const roles = BUSINESS_TYPES[b.type].roles;
+      const employees = b.employees ?? [];
+      const roleCountsOk = roles.every(
+        (role) => employees.filter((e) => e.role === role).length <= roleMaxFor(building)
+      );
+      const employeesOk = employees.every(
+        (e) => typeof e.name === "string" && e.name.length > 0 && roles.includes(e.role)
+      );
+      return building && roleCountsOk && employeesOk;
     })
   );
   check(

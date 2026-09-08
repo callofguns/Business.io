@@ -274,23 +274,35 @@ export function isTaxPaymentDue(day, lastTaxPaymentDay) {
 
 // --- Hiring / staff ---------------------------------------------------
 //
-// Staff are a flat headcount (no named roles) -- each hire costs an hourly
-// wage, paid every day the business is open (see dailyWagePerStaff/
-// gameStore.nextDay), plus a one-time hiring fee. As of Stage 13, staff no
-// longer drive capacity (see "Equipment" below for that) -- hiring's job is
-// service quality: maxStaffFor(building) sizes a "how well-staffed is this
-// business" ratio that feeds satisfactionTarget's staffing bonus.
+// Stage 14: staff are individually-named employees (business.employees,
+// see gameStore), each assigned to one of their business type's named
+// `roles` (businessTypes.js) -- a roster/flavor split, not a new
+// mechanical dimension. Each hire costs an hourly wage, paid every day the
+// business is open (see dailyWagePerStaff/gameStore.nextDay), plus a
+// one-time hiring fee. Staff don't drive capacity (see "Equipment" below
+// for that) -- hiring's job is service quality: maxStaffFor(building)
+// sizes a "how well-staffed is this business" ratio (summed across every
+// role) that feeds satisfactionTarget's staffing bonus.
 export const STAFF_HOURLY_WAGE = 18;
 export const STAFF_HIRE_FEE_MULTIPLIER = 10; // one-time fee = 10x that hire's daily wage
 export const CAPACITY_PER_STAFF_SLOT = 10; // divisor for maxStaffFor, unrelated to actual capacity now
 
-// How many staff a business can usefully hire, sized off the building --
-// bigger buildings support a bigger team. Coincidentally close to the old
-// capacity-based range (roughly 3-9 across the catalog) since the divisor
-// was chosen to match, so hiring's *pacing* doesn't shift even though its
-// effect (satisfaction, not capacity) does.
+// How many staff a business can usefully hire *in total*, sized off the
+// building -- bigger buildings support a bigger team. Coincidentally close
+// to the old capacity-based range (roughly 3-9 across the catalog) since
+// the divisor was chosen to match, so hiring's *pacing* doesn't shift even
+// though its effect (satisfaction, not capacity) does.
 export function maxStaffFor(building) {
   return Math.max(1, Math.ceil(building.customerCapacity / CAPACITY_PER_STAFF_SLOT));
+}
+
+// Each business type has exactly 2 roles -- split the total cap roughly in
+// half, rounded up, so the two roles together give about the same total
+// headcount maxStaffFor always implied (a business can end up slightly
+// over maxStaffFor in total if both roles fill up, which is fine --
+// staffingRatioFor clamps the resulting ratio at 1 either way).
+export function roleMaxFor(building) {
+  return Math.max(1, Math.ceil(maxStaffFor(building) / 2));
 }
 
 export function dailyWagePerStaff(type) {
@@ -306,30 +318,19 @@ export function hireFee(type) {
 // alongside rent.
 export function totalDailyWages(businesses) {
   return businesses.reduce((sum, b) => {
-    if (!b.active || !b.staffCount) return sum;
-    return sum + b.staffCount * dailyWagePerStaff(b.type);
+    if (!b.active || !b.employees?.length) return sum;
+    return sum + b.employees.length * dailyWagePerStaff(b.type);
   }, 0);
 }
 
-// Returns null once the business is already staffed up to maxStaffFor.
-export function staffHireCost(business, building) {
-  const staffCount = business.staffCount ?? 0;
-  if (staffCount >= maxStaffFor(building)) return null;
+// Returns null once the given role is already staffed up to roleMaxFor.
+export function staffHireCost(business, building, role) {
+  const count = (business.employees ?? []).filter((e) => e.role === role).length;
+  if (count >= roleMaxFor(building)) return null;
   return {
     fee: hireFee(business.type),
     dailyWage: dailyWagePerStaff(business.type),
-    nextStaffCount: staffCount + 1,
   };
-}
-
-// Returns null when there's no staff left to let go. No refund of the
-// original hire fee (it was a sunk recruiting/training cost) -- only the
-// ongoing wage stops. Takes `building` for signature parity with
-// staffHireCost, though firing no longer needs it directly.
-export function staffFireResult(business, _building) {
-  const staffCount = business.staffCount ?? 0;
-  if (staffCount <= 0) return null;
-  return { nextStaffCount: staffCount - 1 };
 }
 
 // --- Equipment (Stage 13) -----------------------------------------------
