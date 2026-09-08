@@ -23,6 +23,10 @@ export const BUSINESS_TYPES = {
     operatingHours: 13,
     throughputFactor: 1.0,
     unitsPerVisitor: 5, // basket size
+    // Stage 14: the two named roles staff can be hired into (see
+    // src/screens/Hiring/StaffCard.jsx) -- purely a roster/flavor split,
+    // both count equally toward the staffing->satisfaction bonus.
+    roles: ["Cashier", "Stocker"],
     products: [
       { id: "milk", name: "Milk", min: 4.0, max: 4.5 },
       { id: "cheese", name: "Cheese", min: 2.5, max: 3.5 },
@@ -39,6 +43,7 @@ export const BUSINESS_TYPES = {
     operatingHours: 14,
     throughputFactor: 2.0,
     unitsPerVisitor: 3,
+    roles: ["Barista", "Cashier"],
     products: [
       { id: "coffee-small", name: "Coffee (Small)", min: 2.5, max: 3.0 },
       { id: "coffee-medium", name: "Coffee (Medium)", min: 3.0, max: 3.75 },
@@ -56,6 +61,7 @@ export const BUSINESS_TYPES = {
     operatingHours: 8,
     throughputFactor: 1.0,
     unitsPerVisitor: 0.03, // lead -> client conversion rate
+    roles: ["Designer", "Developer"],
     products: [
       { id: "base-package", name: "Base Package", min: 500, max: 750 },
       { id: "pro-package", name: "Pro Package", min: 1200, max: 1800 },

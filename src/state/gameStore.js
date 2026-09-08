@@ -7,13 +7,12 @@ import { STOCKS, stockById } from "../data/stocks";
 import { LOAN_PRODUCT } from "../data/loanProduct";
 import { SAVINGS_PRODUCT } from "../data/savingsProduct";
 import { equipmentItemById } from "../data/equipment";
+import { randomStaffName } from "../data/staffNames";
 import {
   seedProductPrices,
   rollProductPrices,
   rollDailyOutcome,
   staffHireCost,
-  staffFireResult,
-  maxStaffFor,
   totalDailyWages,
   capacityFromEquipment,
   staffingRatioFor,
@@ -46,6 +45,7 @@ import {
 
 let newsIdSeq = 1;
 let businessIdSeq = 1;
+let employeeIdSeq = 1;
 
 function makeNewsEntry({ icon, title, subtitle, tone = "neutral", day }) {
   return { id: newsIdSeq++, icon, title, subtitle, tone, day };
@@ -210,10 +210,12 @@ export const useGameStore = create((set, get) => ({
       currentCapacity: 0,
       // Sparse { [equipmentId]: quantity }, see data/equipment.js.
       equipment: {},
-      // Headcount hired on the Hiring screen -- no longer drives capacity
+      // Individually-named employees hired on the Hiring screen (Stage
+      // 14), each { id, name, role, hiredDay } -- role is one of this
+      // business type's BUSINESS_TYPES[type].roles. Doesn't drive capacity
       // (Stage 13); raises the satisfaction target instead, see
       // satisfactionTarget's staffing term in lib/economy.js.
-      staffCount: 0,
+      employees: [],
       startedDay: state.day,
       // Sparse { [productId]: price } -- unset products just follow the
       // live market price (see effectivePrice in lib/economy.js).
@@ -246,29 +248,34 @@ export const useGameStore = create((set, get) => ({
     });
   },
 
-  hireStaff: ({ businessId }) => {
+  // Hires one named employee into `role`, one of this business type's
+  // BUSINESS_TYPES[type].roles. A no-op for an unknown role or once that
+  // specific role is already full (see staffHireCost/roleMaxFor).
+  hireStaff: ({ businessId, role }) => {
     const state = get();
     const business = state.businesses.find((b) => b.id === businessId);
     if (!business) return;
     const building = buildingById(business.buildingId);
     if (!building) return;
+    if (!BUSINESS_TYPES[business.type].roles.includes(role)) return;
 
-    const result = staffHireCost(business, building);
-    if (!result) return; // already staffed to building max
+    const result = staffHireCost(business, building, role);
+    if (!result) return; // that role is already at roleMaxFor
     if (state.bankBalance < result.fee) return;
 
+    const name = randomStaffName();
+    const employee = { id: `emp-${employeeIdSeq++}`, name, role, hiredDay: state.day };
     const currency = useCurrencyStore.getState().currency;
-    const maxStaff = maxStaffFor(building);
     set({
       bankBalance: state.bankBalance - result.fee,
       businesses: state.businesses.map((b) =>
-        b.id === businessId ? { ...b, staffCount: result.nextStaffCount } : b
+        b.id === businessId ? { ...b, employees: [...b.employees, employee] } : b
       ),
       news: [
         makeNewsEntry({
           icon: "users",
-          title: `${business.name} hired a new staff member`,
-          subtitle: `-${formatMoney(result.fee, { currency })} hiring fee · ${formatMoney(result.dailyWage, { currency })}/day wage · ${result.nextStaffCount}/${maxStaff} staff, better service`,
+          title: `You hired ${name} as a ${role}`,
+          subtitle: `-${formatMoney(result.fee, { currency })} hiring fee · ${formatMoney(result.dailyWage, { currency })}/day wage · at ${business.name}`,
           tone: "good",
           day: state.day,
         }),
@@ -277,26 +284,25 @@ export const useGameStore = create((set, get) => ({
     });
   },
 
-  fireStaff: ({ businessId }) => {
+  // Lets a specific named employee go. No refund of the original hire fee
+  // (a sunk recruiting/training cost) -- only the ongoing wage stops. A
+  // no-op if that employee is already gone.
+  fireStaff: ({ businessId, employeeId }) => {
     const state = get();
     const business = state.businesses.find((b) => b.id === businessId);
     if (!business) return;
-    const building = buildingById(business.buildingId);
-    if (!building) return;
+    const employee = business.employees.find((e) => e.id === employeeId);
+    if (!employee) return;
 
-    const result = staffFireResult(business, building);
-    if (!result) return; // no staff left to let go
-
-    const maxStaff = maxStaffFor(building);
     set({
       businesses: state.businesses.map((b) =>
-        b.id === businessId ? { ...b, staffCount: result.nextStaffCount } : b
+        b.id === businessId ? { ...b, employees: b.employees.filter((e) => e.id !== employeeId) } : b
       ),
       news: [
         makeNewsEntry({
           icon: "users",
-          title: `${business.name} let a staff member go`,
-          subtitle: `${result.nextStaffCount}/${maxStaff} staff · daily wages reduced, service quality may suffer`,
+          title: `${employee.name} left ${business.name}`,
+          subtitle: "Daily wages reduced, service quality may suffer",
           tone: "neutral",
           day: state.day,
         }),
@@ -762,7 +768,7 @@ export const useGameStore = create((set, get) => ({
       activeCount += 1;
       const { revenue, visitors } = rollDailyOutcome(b, building, prices, newDay);
       businessIncome += revenue;
-      const target = satisfactionTarget(priceRatio(b, prices), staffingRatioFor(b.staffCount ?? 0, building));
+      const target = satisfactionTarget(priceRatio(b, prices), staffingRatioFor(b.employees?.length ?? 0, building));
       const satisfaction = stepSatisfaction(b.satisfaction ?? SATISFACTION_START, target);
       const trafficHistory = [...(b.trafficHistory ?? []), { day: newDay, visitors }].slice(-30);
       return { ...b, dailyEarnings: revenue, satisfaction, trafficHistory };
